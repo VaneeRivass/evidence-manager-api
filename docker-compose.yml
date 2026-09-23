@@ -1,0 +1,24 @@
+# PostgreSQL only. The API and the web client run natively: containerising them
+# degrades hot reload on macOS for no gain. See docs/adr — decision 24.
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: evidence-manager-db
+    environment:
+      POSTGRES_USER: evidence
+      POSTGRES_PASSWORD: evidence
+      POSTGRES_DB: evidence_dev
+    ports:
+      - '5432:5432'
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # Creates the second database, used only by the test suite
+      - ./scripts/init-test-db.sql:/docker-entrypoint-initdb.d/init-test-db.sql
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U evidence']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pgdata:
