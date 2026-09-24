@@ -55,6 +55,10 @@ src/
 api/index.ts      export default app  → Vercel
 ```
 
+**ESM with `NodeNext`: relative imports end in `.js`**, even when the file is `.ts`
+(`import { app } from './app.js'`). Node resolves the compiled file and adds no extension
+on its own.
+
 **Organised by feature, not by file type.** Working on cases touches four files that sit
 together. **Not hexagonal layers**: see `docs/adr/0006`.
 
@@ -73,7 +77,7 @@ would give green tests over broken queries.
 
 ```ts
 // ❌ not substitutable
-import { r2Storage } from './r2-storage.adapter'
+import { r2Storage } from './r2-storage.adapter.js'
 
 // ✅
 export function createFilesService(storage: StoragePort) { … }

@@ -34,7 +34,7 @@ injected, not imported.**
 
 ```ts
 // ❌ The service picks its own dependency: nothing is substitutable
-import { r2Storage } from './r2-storage.adapter'
+import { r2Storage } from './r2-storage.adapter.js'
 
 // ✅ It is handed in
 export function createFilesService(storage: StoragePort) { … }
