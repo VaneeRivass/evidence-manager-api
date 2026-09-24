@@ -12,7 +12,11 @@ export default ts.config(
         // file. Files no tsconfig includes, like this config itself, are not
         // found on their own: they must be listed in allowDefaultProject.
         projectService: {
-          allowDefaultProject: ['eslint.config.js', 'prisma.config.ts'],
+          allowDefaultProject: [
+            'eslint.config.js',
+            'prisma.config.ts',
+            'vitest.config.ts',
+          ],
         },
         tsconfigRootDir: import.meta.dirname,
       },
