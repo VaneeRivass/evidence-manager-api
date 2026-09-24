@@ -95,7 +95,7 @@ decision in this project exists without a requirement demanding it.
 | **RNF-07** | **A failure is understandable to us and opaque to the caller.** Errors are logged with enough context to find them; the client receives a code and a message, never a stack trace revealing how the system is built | Centralised error handler |
 | **RNF-08** | **A rule is written once.** The same schema validates at runtime, produces the TypeScript type and generates the API documentation — so the three cannot drift apart and start disagreeing | Shared schemas |
 | **RNF-09** | **Nothing is welded to one provider.** Storage is reached through an interface, and the application starts the same whether it runs as a serverless function or as a long-lived container | Storage port · application separated from its bootstrap |
-| **RNF-10** | **Someone else can run this.** A person who has never seen the project brings the whole environment up with two commands | `docker compose up` + `npm run dev` |
+| **RNF-10** | **Someone else can run this.** A person who has never seen the project brings the whole environment up with two commands. **Every start is a fresh environment**: the database is recreated and migrated from scratch, so nobody works against leftovers from a previous session | `npm run db:up` + `npm run dev` |
 
 ---
 
@@ -380,3 +380,15 @@ candidate if the scope ever widens.
 
 The listing is bounded on the server and the response uses an envelope that accepts
 pagination fields without breaking consumers. Only the controls are missing.
+
+### `db:up` does not know whether `.env` points at Docker or at Neon
+
+RNF-10 requires a fresh database on every start, so the script runs
+`docker compose down --volumes` and then applies migrations unconditionally. If `.env` is
+ever pointed at Neon instead of the local container — for example to work locally against
+the remote database — the destroy step only reaches Docker, but the migration step still
+runs against whatever `DIRECT_URL` resolves to. There is no check in between.
+
+**How it would be resolved.** Have the script refuse to continue unless `DIRECT_URL`
+resolves to `localhost`, so pointing `.env` at Neon fails loudly instead of migrating it by
+accident.

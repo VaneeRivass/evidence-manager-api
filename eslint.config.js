@@ -12,7 +12,7 @@ export default ts.config(
         // file. Files no tsconfig includes, like this config itself, are not
         // found on their own: they must be listed in allowDefaultProject.
         projectService: {
-          allowDefaultProject: ['eslint.config.js'],
+          allowDefaultProject: ['eslint.config.js', 'prisma.config.ts'],
         },
         tsconfigRootDir: import.meta.dirname,
       },
@@ -39,7 +39,9 @@ export default ts.config(
       ],
     },
   },
-  { ignores: ['dist/', 'node_modules/', 'prisma/migrations/'] },
+  {
+    ignores: ['dist/', 'node_modules/', 'prisma/migrations/', 'src/generated/'],
+  },
 
   // Must come last: it turns off every rule that would fight Prettier.
   prettier,

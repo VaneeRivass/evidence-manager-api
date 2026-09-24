@@ -1,5 +1,7 @@
 # PostgreSQL only. The API and the web client run natively: containerising them
-# degrades hot reload on macOS for no gain. See docs/adr — decision 24.
+# degrades hot reload on macOS for no gain.
+# Start it with `npm run db:up`, not `docker compose up`: the script recreates it empty
+# and applies the migrations. See RNF-10 in docs/requirements.md.
 services:
   db:
     image: postgres:16-alpine

@@ -56,24 +56,29 @@ git clone https://github.com/VaneeRivass/evidence-manager-api.git
 cd evidence-manager-api
 npm install
 
-cp .env.example .env          # then fill in the values, see below
-docker compose up -d          # PostgreSQL on 5432, two databases
+cp .env.example .env          # database values already point at Docker
 
-npx prisma migrate dev        # create the schema
-npx prisma db seed            # demo account and sample cases
-
+npm run db:up                 # a fresh PostgreSQL, migrated, on 5432
 npm run dev                   # http://localhost:3001
 curl http://localhost:3001/health
 ```
 
+**`npm run db:up` starts from zero every time.** It destroys the container and its volume,
+brings PostgreSQL up, waits until it is healthy and applies every migration to both
+databases, `evidence_dev` and `evidence_test`. Nothing carries over from a previous
+session: data created by hand is gone after the next `db:up`. Port 5432 must be free — a
+PostgreSQL installed with Homebrew takes it too.
+
 ### Environment variables
 
-`.env.example` lists every key with placeholder values and **no real credentials**.
+`.env.example` lists every key with placeholder values and **no real credentials**. The
+database strings point at the local Docker container, whose credentials exist only there.
 
 | Variable | What it is |
 |---|---|
-| `DATABASE_URL` | Neon's **pooled** connection string. Ends in `-pooler` and carries `?pgbouncer=true` |
-| `DIRECT_URL` | Neon's **direct** connection string. Used only by migrations, which need a stable session |
+| `DATABASE_URL` | Neon's **pooled** connection string, ending in `-pooler`. Used by the application at runtime, through `@prisma/adapter-pg` |
+| `DIRECT_URL` | Neon's **direct** connection string. Used only by the Prisma CLI, from `prisma.config.ts`: migrations need a stable session |
+| `TEST_DATABASE_URL` | Local only. The test suite's database, `evidence_test`, in the same container. `npm run db:up` migrates it |
 | `JWT_SECRET` | At least 32 characters. Generate with `openssl rand -base64 32` |
 | `S3_ENDPOINT` | `https://<account-id>.r2.cloudflarestorage.com` |
 | `S3_BUCKET` · `S3_ACCESS_KEY_ID` · `S3_SECRET_ACCESS_KEY` | R2 bucket and its API token |
@@ -175,7 +180,8 @@ npm run test:watch
 npm run lint
 npx tsc --noEmit
 
-npx prisma migrate dev     # create and apply a migration
+npm run db:up              # recreate the local database from zero and migrate it
+npx prisma migrate dev     # create a new migration after changing the schema
 npx prisma migrate deploy  # apply pending migrations (production and CI)
 npx prisma studio          # inspect the database
 npx prisma db seed
