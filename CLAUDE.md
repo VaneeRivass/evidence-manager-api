@@ -27,7 +27,7 @@ Read before writing or changing code:
 |---|---|
 | Runtime | Node.js 22 · TypeScript in strict mode |
 | HTTP | **Express 5** — it captures async errors on its own; v4 leaves the request hanging |
-| Database | PostgreSQL (Neon) + Prisma |
+| Database | PostgreSQL (Neon) + **Prisma 7** through `@prisma/adapter-pg`. Connection strings live in `prisma.config.ts` (CLI) and `src/shared/prisma.ts` (runtime), never in `schema.prisma`. The client is generated into `src/generated/prisma` — not committed |
 | Storage | `@aws-sdk/client-s3` + `@aws-sdk/s3-request-presigner` against Cloudflare R2 |
 | Validation | **Zod** — the schema is the validator, the TypeScript type and the OpenAPI source |
 | Identity | **argon2** for hashing · **jose** for signing and verifying tokens |
@@ -141,11 +141,11 @@ reaches the client.
 ## Commands
 
 ```bash
-docker compose up -d           # PostgreSQL: evidence_dev and evidence_test
+npm run db:up                  # FRESH PostgreSQL every time: recreated, both databases migrated
 npm run dev                    # port 3001
 npm run build                  # compile to dist/
 
-npx prisma migrate dev         # create and apply a migration
+npx prisma migrate dev         # create a new migration after changing the schema
 npx prisma migrate deploy      # apply pending migrations (production and CI)
 npx prisma studio              # inspect the database
 npx prisma db seed             # demo account and sample cases

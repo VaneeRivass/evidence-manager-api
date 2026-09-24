@@ -4,3 +4,4 @@ package-lock.json
 
 # Documentation is written by hand, not formatted
 *.md
+src/generated/

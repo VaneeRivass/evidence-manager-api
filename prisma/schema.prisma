@@ -1,0 +1,24 @@
+// Prisma 7: no connection string lives here. See docs/adr/0002.
+//   DIRECT_URL   → prisma.config.ts, for the CLI (migrations)
+//   DATABASE_URL → src/shared/prisma.ts, through @prisma/adapter-pg (queries)
+
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "esm"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  // A UUID, not a sequence: a sequential id invites guessing the next one
+  id           String   @id @default(uuid())
+  // Stored lowercase: normalised before writing and before querying
+  email        String   @unique
+  // Named for what it holds. Never leaves the API, not in a response, not in a log
+  passwordHash String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
