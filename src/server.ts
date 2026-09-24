@@ -1,7 +1,6 @@
 import { app } from './app.js'
+import { env } from './shared/config/env.js'
 
-const port = Number(process.env.PORT ?? 3001)
-
-app.listen(port, () => {
-  console.warn(`API listening on http://localhost:${port}`)
+app.listen(env.PORT, () => {
+  console.warn(`API listening on http://localhost:${env.PORT}`)
 })

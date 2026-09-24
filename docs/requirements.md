@@ -96,6 +96,7 @@ decision in this project exists without a requirement demanding it.
 | **RNF-08** | **A rule is written once.** The same schema validates at runtime, produces the TypeScript type and generates the API documentation — so the three cannot drift apart and start disagreeing | Shared schemas |
 | **RNF-09** | **Nothing is welded to one provider.** Storage is reached through an interface, and the application starts the same whether it runs as a serverless function or as a long-lived container | Storage port · application separated from its bootstrap |
 | **RNF-10** | **Someone else can run this.** A person who has never seen the project brings the whole environment up with two commands. **Every start is a fresh environment**: the database is recreated and migrated from scratch, so nobody works against leftovers from a previous session | `npm run db:up` + `npm run dev` |
+| **RNF-11** | **Required configuration is validated before the process accepts traffic.** If a required environment variable is missing, the process does not start, and the message names which one — instead of failing confusingly minutes or hours later, in the middle of a real operation | Zod schema over `process.env`, run on import |
 
 ---
 
