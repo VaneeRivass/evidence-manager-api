@@ -12,7 +12,7 @@ Read before writing or changing code:
 
 | Where | What |
 |---|---|
-| `docs/requirements.md` | `RF-01`…`RF-23`, `RNF-01`…`RNF-10`, the endpoint map, the flows |
+| `docs/requirements.md` | `RF-01`…`RF-23`, `RNF-01`…`RNF-11`, the endpoint map, the flows |
 | `docs/adr/` | The six architecture decisions and why the alternatives were dropped |
 | `prisma/schema.prisma` | The schema. It is the source of truth, not a copy in a document |
 | `../docs/` | Internal working notes, in Spanish. Not published |
