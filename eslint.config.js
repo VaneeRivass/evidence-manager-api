@@ -9,9 +9,11 @@ export default ts.config(
     languageOptions: {
       parserOptions: {
         // projectService lets typescript-eslint resolve the right tsconfig per
-        // file, including this config file itself, which a fixed `project`
-        // path cannot do.
-        projectService: true,
+        // file. Files no tsconfig includes, like this config itself, are not
+        // found on their own: they must be listed in allowDefaultProject.
+        projectService: {
+          allowDefaultProject: ['eslint.config.js'],
+        },
         tsconfigRootDir: import.meta.dirname,
       },
     },
@@ -31,7 +33,10 @@ export default ts.config(
       'no-console': ['error', { allow: ['warn', 'error'] }],
 
       'no-unused-vars': 'off',
-      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        { argsIgnorePattern: '^_' },
+      ],
     },
   },
   { ignores: ['dist/', 'node_modules/', 'prisma/migrations/'] },

@@ -1,0 +1,6 @@
+dist/
+node_modules/
+package-lock.json
+
+# Documentation is written by hand, not formatted
+*.md
