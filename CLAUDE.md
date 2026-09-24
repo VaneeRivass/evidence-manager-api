@@ -127,7 +127,8 @@ There is no cleanup process: serverless has no background jobs.
 validated between 8 and 72 bytes.
 
 **`passwordHash` never leaves.** Not in a response, not in a log. Pino redacts
-`authorization`, `cookie` and any `password` field.
+`authorization`, `cookie`, the response's `set-cookie` (it carries the session token) and
+any `password` field.
 
 **Errors follow RFC 9457** with `application/problem+json`, a stable machine-readable code
 and the `requestId`. Services throw `NotFound()` or `Forbidden()` and know nothing about
