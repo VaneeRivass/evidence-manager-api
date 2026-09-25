@@ -9,7 +9,7 @@ import {
 } from 'pino'
 import { pinoHttp, type HttpLogger } from 'pino-http'
 import { env } from './config/env.js'
-import { AppError } from './errors/app-error.js'
+import { AppError, ValidationError } from './errors/app-error.js'
 
 // One place assembles both loggers. The app calls it with the defaults; the
 // tests call it with an array as destination and read what would be logged,
@@ -64,10 +64,17 @@ export function createLoggers(
       }),
       res: (res: ServerResponse) => ({ statusCode: res.statusCode }),
       // An AppError is expected: its code and message explain it, a stack would
-      // only add noise. Anything else is a bug and is logged whole.
+      // only add noise. Anything else is a bug and is logged whole. A
+      // ValidationError adds which fields failed and why — names and codes
+      // only, never the values sent, so no password can reach the log.
       err: (err: Error) =>
         err instanceof AppError
-          ? { code: err.code, message: err.message, params: err.params }
+          ? {
+              code: err.code,
+              message: err.message,
+              params: err.params,
+              errors: err instanceof ValidationError ? err.errors : undefined,
+            }
           : stdSerializers.err(err),
     },
     // By status, not by the presence of an error: a 404 carries an AppError too,

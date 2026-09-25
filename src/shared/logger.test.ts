@@ -1,6 +1,8 @@
 import express from 'express'
 import request from 'supertest'
 import { beforeEach, describe, expect, it } from 'vitest'
+import { ValidationError } from './errors/app-error.js'
+import { FieldCode } from './errors/error-codes.js'
 import { errorHandler, notFoundHandler } from './errors/error-handler.js'
 import { createLoggers } from './logger.js'
 
@@ -19,6 +21,14 @@ const app = express()
 app.use(httpLogger)
 app.get('/login', (_req, res) => {
   res.cookie('session', 'token-from-set-cookie').json({ ok: true })
+})
+app.post('/invalid', () => {
+  throw new ValidationError([
+    { field: 'password', code: FieldCode.TOO_SHORT, params: { min: 8 } },
+  ])
+})
+app.post('/parse', express.json(), (_req, res) => {
+  res.json({ ok: true })
 })
 app.use(notFoundHandler)
 app.use(errorHandler)
@@ -53,6 +63,33 @@ describe('request logging', () => {
     expect(written).not.toContain('token-from-cookie')
     expect(written).not.toContain('token-from-authorization')
     expect(written).not.toContain('token-from-set-cookie')
+  })
+
+  // RF-22 · the log alone must say which field failed, without reproducing it
+  it('logs which fields failed a validation', async () => {
+    await request(app).post('/invalid')
+
+    expect(lines[0]).toMatchObject({
+      err: {
+        code: 'VALIDATION_ERROR',
+        errors: [{ field: 'password', code: 'TOO_SHORT', params: { min: 8 } }],
+      },
+    })
+  })
+
+  // RNF-07 · JSON.parse quotes the body in its message, and the body may
+  // carry a password: the malformed body must not reach the log
+  it('logs a malformed body as a warning, without quoting it', async () => {
+    await request(app)
+      .post('/parse')
+      .set('Content-Type', 'application/json')
+      .send('{"password": "secret-in-body"')
+
+    expect(lines[0]).toMatchObject({
+      level: 40,
+      err: { code: 'UNREADABLE_BODY' },
+    })
+    expect(JSON.stringify(lines)).not.toContain('secret-in-body')
   })
 
   // CLAUDE.md · passwordHash never leaves, not in a response, not in a log
