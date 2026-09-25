@@ -79,7 +79,8 @@ export function createLoggers(
     },
     // By status, not by the presence of an error: a 404 carries an AppError too,
     // and it is the caller's mistake, not ours.
-    customLogLevel: (_req, res) => {
+    // Typed on purpose: pino-http would otherwise accept a typo as a custom level.
+    customLogLevel: (_req, res): LevelWithSilent => {
       if (res.statusCode >= 500) return 'error'
       if (res.statusCode >= 400) return 'warn'
       return 'info'
