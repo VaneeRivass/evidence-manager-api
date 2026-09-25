@@ -210,7 +210,7 @@ Eight, each with why it is accepted and how it would be resolved, in
 [`docs/requirements.md`](docs/requirements.md). The ones worth knowing before reading the
 code:
 
-- **The token cannot be revoked.** A stateless JWT, valid for 24 hours. No sign-out
+- **The token cannot be revoked.** A stateless JWT, valid for 8 hours. No sign-out
   everywhere.
 - **The file contents are not inspected.** Type and size are verified against storage, but
   not the bytes. The file is never served from the application's domain, which is what

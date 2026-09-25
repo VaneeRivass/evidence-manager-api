@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { registerSchema } from './auth.schema.js'
+import { loginSchema, registerSchema } from './auth.schema.js'
 
 describe('registerSchema', () => {
   // RF-01a
@@ -58,5 +58,35 @@ describe('registerSchema', () => {
 
     expect(atBound.success).toBe(true)
     expect(overBound.success).toBe(false)
+  })
+})
+
+describe('loginSchema', () => {
+  // RF-02 · the email is normalised before lookup, as it was before storing
+  it('normalises the email the same way registration does', () => {
+    const result = loginSchema.parse({
+      email: '  Ana@Example.com ',
+      password: 'whatever',
+    })
+
+    expect(result.email).toBe('ana@example.com')
+  })
+
+  // RF-02 · the password policy is registration's: a password stored under
+  // an older, looser policy must still be able to sign in
+  it('accepts a password shorter than the registration minimum', () => {
+    const result = loginSchema.safeParse({
+      email: 'a@b.com',
+      password: 'short',
+    })
+
+    expect(result.success).toBe(true)
+  })
+
+  // RNF-04
+  it('rejects an empty password', () => {
+    const result = loginSchema.safeParse({ email: 'a@b.com', password: '' })
+
+    expect(result.success).toBe(false)
   })
 })

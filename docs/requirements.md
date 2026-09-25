@@ -19,8 +19,8 @@ every requirement is defined in exactly one file.
 | **RF-01** | Registration with email and password returns `201`. A duplicate email returns `409`. Invalid data returns `400` naming the offending field. **The password is stored only as a hash.** |
 | **RF-01a** | The email is **trimmed** of surrounding spaces, validated up to **254 characters** and **normalised to lowercase** before being stored and before being queried. Without that, `Ana@x.com` and `ana@x.com` would create two accounts and the unique index would not prevent it; and a space left by pasting or autofill would reject a valid address as malformed. |
 | **RF-01b** | The password is validated between **8 and 72 bytes**. The upper bound is not arbitrary: bcrypt reads only the first 72 bytes and discards the rest silently, so two different long passwords would open the same account. argon2 has no such limit, but the bound is kept so the algorithm can be changed without opening that hole. |
-| **RF-02** | Login with valid credentials returns `200` and an `httpOnly` session cookie. Invalid credentials return `401` **with the same message whether or not the email exists**. The email is normalised before lookup. |
-| **RF-02a** | The token expires **24 hours** after issuance. It carries only the user identifier and the email: an identity card, not a copy of the record. |
+| **RF-02** | Login with valid credentials returns `200` with `{ id, email }` and an `httpOnly` session cookie — the body is the only way the client learns who signed in, since it cannot read the cookie. Invalid credentials return `401` **with the same message whether or not the email exists**, and **in the same time**: when the email does not exist the password is still checked against a placeholder hash, or the quicker answer would give the email away. The email is normalised before lookup. |
+| **RF-02a** | The token expires **8 hours** after issuance — one working day, so it lapses overnight rather than mid-task. It carries only the user identifier and the email: an identity card, not a copy of the record. |
 | **RF-03** | Current user lookup returns `200`. Without a session, `401`. |
 | **RF-04** | Logout invalidates the cookie. |
 
@@ -140,7 +140,7 @@ cover.**
 | Method | Path | Session | Ownership | Input | Success | Errors | Requirement |
 |---|---|---|---|---|---|---|---|
 | `POST` | `/auth/register` | — | — | email, password | `201` | `400` `409` | RF-01 |
-| `POST` | `/auth/login` | — | — | email, password | `200` + cookie | `400` `401` | RF-02 |
+| `POST` | `/auth/login` | — | — | email, password | `200` `{ id, email }` + cookie | `400` `401` | RF-02 |
 | `GET` | `/auth/me` | ✓ | — | — | `200` | `401` | RF-03 |
 | `POST` | `/auth/logout` | ✓ | — | — | `204` | `401` | RF-04 |
 | `POST` | `/cases` | ✓ | — | title, description | `201` | `400` `401` | RF-05 |
@@ -204,7 +204,7 @@ sequenceDiagram
     alt wrong credentials
         A-->>B: 401 · same message whether or not the email exists
     else correct
-        A->>A: sign JWT { sub, email } · 24 h
+        A->>A: sign JWT { sub, email } · 8 h
         A-->>B: 200 + Set-Cookie session=…; HttpOnly; Secure; SameSite=Lax
     end
 
@@ -390,14 +390,17 @@ serverless model does not guarantee it.
 
 A JWT is stateless: the server keeps no list of active sessions. While the token has not
 expired it is valid, and **there is no way to invalidate it**. There is no "sign out
-everywhere" and no way to revoke a single session. A stolen token is usable for up to 24
+everywhere" and no way to revoke a single session. A stolen token is usable for up to 8
 hours.
 
 What mitigates it: travelling in an `httpOnly` cookie, a cross-site scripting attack cannot
 read it. What remains is theft through machine access or a compromised browser.
 
-Why 24 hours and not 15 minutes: without a renewal mechanism, a short expiry would eject
-the user mid-session.
+Why 8 hours: OWASP's session management guidance sets the absolute timeout by how long
+the application is normally used, and suggests 4 to 8 hours for one used through a working
+day. Shorter, and without a renewal mechanism the token would expire mid-task: the next
+save answers `401` and whatever was being typed is lost. Longer buys nothing, since nobody
+works a case for a whole day, and only widens the window a stolen token stays usable.
 
 **How it would be resolved.** Two options, in increasing cost:
 

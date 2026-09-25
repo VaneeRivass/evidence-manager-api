@@ -6,6 +6,9 @@ import * as z from 'zod'
 // that first reads it. See docs/requirements.md RNF-11.
 const schema = z.object({
   DATABASE_URL: z.string().min(1),
+  // Signs the session token. At least 32 characters: a short secret can be
+  // brute-forced offline from a single token. See docs/adr/0003.
+  JWT_SECRET: z.string().min(32),
   PORT: z.coerce.number().int().positive().default(3001),
   LOG_LEVEL: z
     .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'])

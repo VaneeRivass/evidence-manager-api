@@ -1,6 +1,6 @@
 # ADR-0003 · Session in an httpOnly cookie, resolved with a proxy
 
-**Status:** accepted · **Date:** 2026-09-22
+**Status:** accepted · **Date:** 2026-09-22 · **Revised:** 2026-09-25, why a JWT and not a server-side session
 
 ## Context
 
@@ -15,8 +15,9 @@ depending on the reviewer's browser.
 
 ## Decision
 
-The token travels in an `httpOnly; Secure; SameSite=Lax` cookie, and the front end declares
-a rewrite in its configuration:
+The session is a JWT signed by the API; what it carries and how long it lasts is
+`docs/requirements.md` RF-02a. It travels in a cookie named `session`,
+`httpOnly; Secure; SameSite=Lax`, and the front end declares a rewrite in its configuration:
 
 ```js
 // next.config.js
@@ -32,6 +33,14 @@ The variable is `API_URL`, never `NEXT_PUBLIC_API_URL`: anything with that prefi
 inlined into the bundle the browser downloads, and the rewrite runs on the server.
 
 ## Alternatives considered
+
+**A server-side session.** The cookie carries a random identifier and the server keeps a
+row per session. It is the only option that allows real revocation: signing out deletes the
+row, and a copied cookie stops working everywhere. Rejected because the API runs as a
+serverless function: every protected request would query the database before doing
+anything, and it adds a table and a migration. A JWT is verified with a signature check, no
+query. The price is that it cannot be revoked before it expires, recorded as a known
+limitation in `docs/requirements.md`.
 
 **Token in `localStorage` with an `Authorization` header.** Works in every browser and is
 simpler, but it is the option the brief itself marks as less preferable: a cross-site
