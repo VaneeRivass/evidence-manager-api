@@ -1,0 +1,54 @@
+import express from 'express'
+import request from 'supertest'
+import { describe, expect, it } from 'vitest'
+import { signSessionToken } from '../../modules/auth/auth.service.js'
+import { errorHandler } from '../errors/error-handler.js'
+import { requireAuth } from './require-auth.js'
+
+// Answers with whatever requireAuth left on the request, so each test sees
+// exactly what a real handler behind it would receive.
+const probe = express()
+probe.get('/probe', requireAuth, (req, res) => {
+  res.json(req.user)
+})
+probe.use(errorHandler)
+
+const user = {
+  id: 'c1a2b3c4-0000-4000-8000-000000000001',
+  email: 'ana@example.com',
+  passwordHash: 'argon2-hash',
+  createdAt: new Date(),
+  updatedAt: new Date(),
+}
+
+describe('requireAuth', () => {
+  // RF-03 · no cookie, no session
+  it('answers 401 when there is no session cookie', async () => {
+    const res = await request(probe).get('/probe')
+
+    expect(res.status).toBe(401)
+    expect(res.body).toMatchObject({ code: 'UNAUTHENTICATED' })
+  })
+
+  // RF-03 · a cookie with the right name but no valid token in it
+  it('answers 401 when the session cookie is not a valid token', async () => {
+    const res = await request(probe)
+      .get('/probe')
+      .set('Cookie', 'session=not-a-token')
+
+    expect(res.status).toBe(401)
+    expect(res.body).toMatchObject({ code: 'UNAUTHENTICATED' })
+  })
+
+  // RF-03 · the handler behind it receives who is asking
+  it('lets a valid session through with the user on the request', async () => {
+    const token = await signSessionToken(user)
+
+    const res = await request(probe)
+      .get('/probe')
+      .set('Cookie', `session=${token}`)
+
+    expect(res.status).toBe(200)
+    expect(res.body).toEqual({ id: user.id, email: user.email })
+  })
+})
