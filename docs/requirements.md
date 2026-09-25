@@ -21,8 +21,8 @@ every requirement is defined in exactly one file.
 | **RF-01b** | The password is validated between **8 and 72 bytes**. The upper bound is not arbitrary: bcrypt reads only the first 72 bytes and discards the rest silently, so two different long passwords would open the same account. argon2 has no such limit, but the bound is kept so the algorithm can be changed without opening that hole. |
 | **RF-02** | Login with valid credentials returns `200` with `{ id, email }` and an `httpOnly` session cookie — the body is the only way the client learns who signed in, since it cannot read the cookie. Invalid credentials return `401` **with the same message whether or not the email exists**, and **in the same time**: when the email does not exist the password is still checked against a placeholder hash, or the quicker answer would give the email away. The email is normalised before lookup. |
 | **RF-02a** | The token expires **8 hours** after issuance — one working day, so it lapses overnight rather than mid-task. The lifetime can be overridden per environment, so expiry can be watched locally in a minute instead of a day; production keeps the default. It carries only the user identifier and the email: an identity card, not a copy of the record. |
-| **RF-03** | Current user lookup returns `200`. Without a session, `401`. |
-| **RF-04** | Logout invalidates the cookie. |
+| **RF-03** | Current user lookup returns `200` with `{ id, email }`, read from the verified session token — no query, since neither can change while the token is valid. Without a valid session, `401`. |
+| **RF-04** | Logout deletes the session cookie from the browser and returns `204`. The token itself stays valid until it expires: a copy taken earlier still works — see the known limitation "The token cannot be revoked". |
 
 ### 1.2 Cases
 
@@ -141,8 +141,8 @@ cover.**
 |---|---|---|---|---|---|---|---|
 | `POST` | `/auth/register` | — | — | email, password | `201` | `400` `409` | RF-01 |
 | `POST` | `/auth/login` | — | — | email, password | `200` `{ id, email }` + cookie | `400` `401` | RF-02 |
-| `GET` | `/auth/me` | ✓ | — | — | `200` | `401` | RF-03 |
-| `POST` | `/auth/logout` | ✓ | — | — | `204` | `401` | RF-04 |
+| `GET` | `/auth/me` | ✓ | — | — | `200` `{ id, email }` | `401` | RF-03 |
+| `POST` | `/auth/logout` | ✓ | — | — | `204` + cookie cleared | `401` | RF-04 |
 | `POST` | `/cases` | ✓ | — | title, description | `201` | `400` `401` | RF-05 |
 | `GET` | `/cases` | ✓ | — | status, order, page, limit | `200` `{items}` | `400` `401` | RF-06 |
 | `GET` | `/cases/:id` | ✓ | ✓ | — | `200` | `400` `401` `403` `404` | RF-07 |
