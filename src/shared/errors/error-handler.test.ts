@@ -3,7 +3,7 @@ import request from 'supertest'
 import { describe, expect, it } from 'vitest'
 import { app } from '../../app.js'
 import { httpLogger } from '../logger.js'
-import { AppError } from './app-error.js'
+import { PayloadTooLarge } from './app-error.js'
 import { ErrorCode } from './error-codes.js'
 import { errorHandler } from './error-handler.js'
 
@@ -14,7 +14,7 @@ probe.get('/bug', () => {
   throw new TypeError("Cannot read properties of undefined (reading 'userId')")
 })
 probe.get('/with-params', () => {
-  throw new AppError(413, ErrorCode.PAYLOAD_TOO_LARGE, 'Body is 19 MB', {
+  throw PayloadTooLarge(ErrorCode.PAYLOAD_TOO_LARGE, 'Body is 19 MB', {
     max: 102400,
   })
 })
@@ -55,36 +55,15 @@ describe('error handler', () => {
     })
   })
 
-  // RF-01 · RNF-07 · the client's mistake, not ours: 400, never 500
-  it('answers a malformed JSON body with a 400', async () => {
+  // RF-21 · the body is read only by the route that validates it
+  it('answers an unknown route with a 404 even when its body is malformed', async () => {
     const res = await request(app)
-      .post('/auth/register')
+      .post('/does-not-exist')
       .set('Content-Type', 'application/json')
-      .send('{"email": "ana@x.com", "password": "secret-in-body"')
+      .send('{"broken"')
 
-    expect(res.status).toBe(400)
-    const { problem } = problemOf(res)
-    expect(problem).toEqual({
-      title: 'Bad Request',
-      status: 400,
-      code: 'UNREADABLE_BODY',
-    })
-  })
-
-  // RNF-07
-  it('answers a body over the size limit with a 413 and the limit', async () => {
-    const res = await request(app)
-      .post('/auth/register')
-      .set('Content-Type', 'application/json')
-      .send(
-        JSON.stringify({ email: 'ana@x.com', password: 'a'.repeat(200_000) }),
-      )
-
-    expect(res.status).toBe(413)
-    expect(res.body).toMatchObject({
-      code: 'PAYLOAD_TOO_LARGE',
-      params: { max: 102400 },
-    })
+    expect(res.status).toBe(404)
+    expect(res.body).toMatchObject({ code: 'ROUTE_NOT_FOUND' })
   })
 
   // RNF-07

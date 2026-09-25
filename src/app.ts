@@ -13,8 +13,6 @@ export const app = express()
 
 // First, so every later line of the request, error included, carries its id.
 app.use(httpLogger)
-// No binary ever enters this process, so JSON is the only body this parses.
-app.use(express.json())
 
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok' })

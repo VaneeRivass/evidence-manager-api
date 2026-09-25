@@ -1,8 +1,8 @@
 import * as z from 'zod'
 
-// RF-01a · capped at 254 characters, normalised to lowercase before it is
-// stored or queried — Ana@x.com and ana@x.com must collide.
-const email = z.string().max(254).toLowerCase().pipe(z.email())
+// RF-01a · trimmed, capped at 254 characters and normalised to lowercase
+// before it is stored or queried — Ana@x.com and ana@x.com must collide.
+const email = z.string().trim().max(254).toLowerCase().pipe(z.email())
 
 // RF-01b · 8 to 72 bytes, not characters: argon2 has no upper bound of its
 // own, but the bound is kept so the algorithm can change without silently

@@ -25,9 +25,11 @@ const withStatus =
   (code: ErrorCode, message: string, params?: Params): AppError =>
     new AppError(status, code, message, params)
 
-export const NotFound = withStatus(404)
+export const BadRequest = withStatus(400)
 export const Forbidden = withStatus(403)
+export const NotFound = withStatus(404)
 export const Conflict = withStatus(409)
+export const PayloadTooLarge = withStatus(413)
 
 // One entry per invalid field. See docs/requirements.md RF-23 for the shape.
 export type FieldError = { field: string; code: FieldCode; params?: Params }
