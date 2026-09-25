@@ -12,6 +12,16 @@ describe('registerSchema', () => {
     expect(result.email).toBe('ana@example.com')
   })
 
+  // RF-01a · a space left by pasting or autofill is not a malformed address
+  it('trims the spaces around the email', () => {
+    const result = registerSchema.parse({
+      email: '  Ana@Example.com ',
+      password: 'longenough1',
+    })
+
+    expect(result.email).toBe('ana@example.com')
+  })
+
   // RF-01b
   it('rejects a password under 8 bytes', () => {
     const result = registerSchema.safeParse({

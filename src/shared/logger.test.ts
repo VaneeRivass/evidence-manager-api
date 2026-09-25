@@ -1,10 +1,12 @@
 import express from 'express'
 import request from 'supertest'
 import { beforeEach, describe, expect, it } from 'vitest'
+import * as z from 'zod'
 import { ValidationError } from './errors/app-error.js'
 import { FieldCode } from './errors/error-codes.js'
 import { errorHandler, notFoundHandler } from './errors/error-handler.js'
 import { createLoggers } from './logger.js'
+import { validate } from './middleware/validate.js'
 
 // The app's own loggers, writing to an array instead of stdout, and at info:
 // the test run silences the real ones.
@@ -27,7 +29,7 @@ app.post('/invalid', () => {
     { field: 'password', code: FieldCode.TOO_SHORT, params: { min: 8 } },
   ])
 })
-app.post('/parse', express.json(), (_req, res) => {
+app.post('/parse', validate(z.object({})), (_req, res) => {
   res.json({ ok: true })
 })
 app.use(notFoundHandler)

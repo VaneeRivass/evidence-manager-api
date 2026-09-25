@@ -89,7 +89,7 @@ export function createFilesService(storage: StoragePort) { … }
 router.patch('/:id',
   requireAuth,                 // crypto, no database
   validateParams(idSchema),    // is :id a UUID?     → 400
-  validate(updateCaseSchema),  // is the body valid? → 400
+  validate(updateCaseSchema),  // read the body, is it valid? → 400 / 413
   loadOwnedCase,               // NOW the query      → 404 / 403
   update,
 )
