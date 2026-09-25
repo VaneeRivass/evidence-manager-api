@@ -26,6 +26,7 @@ const withStatus =
     new AppError(status, code, message, params)
 
 export const BadRequest = withStatus(400)
+export const Unauthorized = withStatus(401)
 export const Forbidden = withStatus(403)
 export const NotFound = withStatus(404)
 export const Conflict = withStatus(409)

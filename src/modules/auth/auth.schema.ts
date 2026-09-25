@@ -31,3 +31,11 @@ const password = z.string().superRefine((value, ctx) => {
 export const registerSchema = z.object({ email, password })
 
 export type RegisterInput = z.infer<typeof registerSchema>
+
+// RF-02 · the same email normalisation as registration, or Ana@x.com would not
+// find the account stored as ana@x.com. The password is only required: the
+// policy is enforced when it is set, and one stored under an older, looser
+// policy must still sign in.
+export const loginSchema = z.object({ email, password: z.string().min(1) })
+
+export type LoginInput = z.infer<typeof loginSchema>
