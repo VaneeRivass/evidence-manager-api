@@ -80,6 +80,7 @@ database strings point at the local Docker container, whose credentials exist on
 | `DIRECT_URL` | Neon's **direct** connection string. Used only by the Prisma CLI, from `prisma.config.ts`: migrations need a stable session |
 | `TEST_DATABASE_URL` | Local only. The test suite's database, `evidence_test`, in the same container. `npm run db:up` migrates it |
 | `JWT_SECRET` | At least 32 characters. Generate with `openssl rand -base64 32` |
+| `SESSION_TTL_SECONDS` | Optional. Default `28800` (8 hours). Set it to `60` locally to watch a session expire |
 | `S3_ENDPOINT` | `https://<account-id>.r2.cloudflarestorage.com` |
 | `S3_BUCKET` · `S3_ACCESS_KEY_ID` · `S3_SECRET_ACCESS_KEY` | R2 bucket and its API token |
 | `MAX_FILE_SIZE_BYTES` | Default `5242880` (5 MB) |

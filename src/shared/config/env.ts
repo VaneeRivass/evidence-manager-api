@@ -9,6 +9,13 @@ const schema = z.object({
   // Signs the session token. At least 32 characters: a short secret can be
   // brute-forced offline from a single token. See docs/adr/0003.
   JWT_SECRET: z.string().min(32),
+  // RF-02a · one working day unless an environment says otherwise, so expiry
+  // can be watched locally without waiting 8 hours.
+  SESSION_TTL_SECONDS: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(8 * 60 * 60),
   PORT: z.coerce.number().int().positive().default(3001),
   LOG_LEVEL: z
     .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'])
