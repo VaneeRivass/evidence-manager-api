@@ -45,7 +45,7 @@ src/
 │   ├── cases/    cases.routes · cases.controller · cases.service · cases.schema · cases.mapper
 │   └── files/    files.routes · files.controller · files.service · storage.port · r2-storage.adapter
 ├── shared/
-│   ├── errors/       app-error · error-handler (RFC 9457)
+│   ├── errors/       app-error · error-codes · error-handler (RFC 9457)
 │   ├── middleware/   require-auth · load-owned-case · validate
 │   ├── config/       env.ts — a Zod schema over process.env
 │   └── prisma.ts     single client instance
