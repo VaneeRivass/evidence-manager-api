@@ -1,5 +1,5 @@
 import * as argon2 from 'argon2'
-import { randomUUID } from 'node:crypto'
+import { randomBytes } from 'node:crypto'
 import { SignJWT } from 'jose'
 import { env } from '../../shared/config/env.js'
 import { Conflict, Unauthorized } from '../../shared/errors/app-error.js'
@@ -47,33 +47,28 @@ export async function registerUser({
   }
 }
 
-// A hash of a random value nobody knows, made with the same parameters as a
-// real one, so verifying against it costs the same. Created on first use and
-// kept for the life of the instance.
-let placeholderHash: Promise<string> | undefined
-const getPlaceholderHash = () => (placeholderHash ??= argon2.hash(randomUUID()))
-
-// One error for both failures: telling them apart would reveal which emails
-// are registered.
-const invalidCredentials = () =>
-  Unauthorized(ErrorCode.INVALID_CREDENTIALS, 'Invalid credentials')
+// A hash of 32 random bytes nobody keeps, made when the module loads, so it
+// is a real argon2 hash with the same parameters registration uses and
+// verifying against it costs the same. On serverless that is once per cold
+// start, whatever the first request is — so its cost gives no email away.
+const placeholderHash = argon2.hash(randomBytes(32))
 
 // RF-02 · an unknown email still pays for a verification, against the
 // placeholder. Answering it straight away would be quicker than a wrong
-// password, and that difference alone would give the email away.
+// password, and that difference alone would give the email away. One error
+// for both failures: telling them apart would reveal which emails exist.
 export async function loginUser({
   email,
   password,
 }: LoginInput): Promise<User> {
   const user = await prisma.user.findUnique({ where: { email } })
+  const matches = await argon2.verify(
+    user?.passwordHash ?? (await placeholderHash),
+    password,
+  )
 
-  if (!user) {
-    await argon2.verify(await getPlaceholderHash(), password)
-    throw invalidCredentials()
-  }
-
-  if (!(await argon2.verify(user.passwordHash, password))) {
-    throw invalidCredentials()
+  if (!user || !matches) {
+    throw Unauthorized(ErrorCode.INVALID_CREDENTIALS, 'Invalid credentials')
   }
 
   return user
@@ -85,9 +80,9 @@ export const toPublicUser = (user: User): { id: string; email: string } => ({
   email: user.email,
 })
 
-// RF-02a · one working day: the token lapses overnight, not mid-task. The
-// cookie's Max-Age reads the same constant, so the two cannot drift apart.
-export const SESSION_TTL_SECONDS = 8 * 60 * 60
+// RF-02a · read from the environment, 8 hours by default. The cookie's Max-Age
+// reads the same value, so the two cannot drift apart.
+export const SESSION_TTL_SECONDS = env.SESSION_TTL_SECONDS
 
 // HS256: one secret both signs and verifies, and this API is the only party
 // that does either. A key pair would only pay off if another service verified.
