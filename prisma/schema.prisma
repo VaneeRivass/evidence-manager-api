@@ -3,9 +3,11 @@
 //   DATABASE_URL → src/shared/database/prisma.ts, through @prisma/adapter-pg (queries)
 
 generator client {
-  provider     = "prisma-client"
-  output       = "../src/generated/prisma"
-  moduleFormat = "esm"
+  provider        = "prisma-client"
+  output          = "../src/generated/prisma"
+  moduleFormat    = "esm"
+  // Allows `where` on @@index, for the partial index on Case
+  previewFeatures = ["partialIndexes"]
 }
 
 datasource db {
@@ -19,6 +21,37 @@ model User {
   email        String   @unique
   // Named for what it holds. Never leaves the API, not in a response, not in a log
   passwordHash String
+  cases        Case[]
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+}
+
+enum CaseStatus {
+  OPEN
+  CLOSED
+}
+
+model Case {
+  id          String     @id @default(uuid())
+  title       String     @db.VarChar(120)
+  description String     @db.VarChar(2000)
+  status      CaseStatus @default(OPEN)
+
+  // Unique so two cases cannot point at the same object — deleting one would
+  // destroy the other's evidence
+  fileKey  String? @unique
+  fileName String?
+  fileSize Int?
+  fileType String?
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  // The list's default query: an owner's live cases, most recently updated first.
+  // Deleted cases stay out of the index: for the API they do not exist
+  @@index([userId, updatedAt(sort: Desc)], where: raw("\"deletedAt\" IS NULL"))
 }
