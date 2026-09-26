@@ -164,11 +164,15 @@ src/
 └── server.ts     app.listen()        → local and Render
 
 api/index.ts      export default app  → Vercel
+
+tests/
+├── helpers.ts · integration-setup.ts
+└── integration/  one file per module
 ```
 
 Organised by feature rather than by file type: working on cases touches four files that sit
 together. The three bootstrap files mean the same application deploys as a function and as
-a container, and tests run against the exported app without opening a port.
+a container, and tests serve the exported app themselves, on a temporary local port.
 
 ---
 
@@ -178,6 +182,8 @@ a container, and tests run against the exported app without opening a port.
 npm run dev            # port 3001
 npm run build
 npm test               # Vitest: unit and integration
+npm run test:unit      # no database, no Docker
+npm run test:integration   # real PostgreSQL: npm run db:up first
 npm run test:watch
 npm run lint
 npx tsc --noEmit
@@ -201,6 +207,12 @@ substituted, through its port, because it cannot be run locally.
 The tests that matter most are the ones proving a user cannot reach another user's case,
 that a deleted case answers `404` even knowing its identifier, and that confirming an
 invented key is rejected.
+
+Unit tests (`*.test.ts`, next to the file they test) never leave the process — no
+database, no network beyond a temporary port on `127.0.0.1`, no file system — and run
+without Docker. Integration tests (in
+`tests/integration/`, one file per module) use the real PostgreSQL and run one file at a
+time, since they share it.
 
 No coverage percentage is chased.
 

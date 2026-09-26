@@ -22,12 +22,20 @@ const schema = z.object({
     .default('info'),
 })
 
-const result = schema.safeParse(process.env)
+type Env = z.infer<typeof schema>
 
-if (!result.success) {
-  throw new Error(
-    `Invalid environment configuration:\n${z.prettifyError(result.error)}`,
-  )
+// A function over any source, so the check can be tested without starting a
+// process; the app only ever calls it once, below, on process.env.
+export function parseEnv(source: NodeJS.ProcessEnv): Env {
+  const result = schema.safeParse(source)
+
+  if (!result.success) {
+    throw new Error(
+      `Invalid environment configuration:\n${z.prettifyError(result.error)}`,
+    )
+  }
+
+  return result.data
 }
 
-export const env = result.data
+export const env = parseEnv(process.env)

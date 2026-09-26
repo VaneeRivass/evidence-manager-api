@@ -22,6 +22,26 @@ describe('registerSchema', () => {
     expect(result.email).toBe('ana@example.com')
   })
 
+  // RF-01a · 254 is the longest address SMTP can deliver to
+  it('rejects an email over 254 characters', () => {
+    const result = registerSchema.safeParse({
+      email: `${'a'.repeat(64)}@${'b'.repeat(186)}.com`,
+      password: 'longenough1',
+    })
+
+    expect(result.success).toBe(false)
+  })
+
+  // RF-01b · the lower bound itself is allowed
+  it('accepts a password of exactly 8 bytes', () => {
+    const result = registerSchema.safeParse({
+      email: 'a@b.com',
+      password: '12345678',
+    })
+
+    expect(result.success).toBe(true)
+  })
+
   // RF-01b
   it('rejects a password under 8 bytes', () => {
     const result = registerSchema.safeParse({

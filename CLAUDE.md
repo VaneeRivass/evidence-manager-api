@@ -57,6 +57,11 @@ src/
 └── server.ts     app.listen()        → local and Render
 
 api/index.ts      export default app  → Vercel
+
+tests/
+├── helpers.ts             shared by both kinds, no database
+├── integration-setup.ts   empties every table before each integration test
+└── integration/           auth.test · cases.test · files.test
 ```
 
 **ESM with `NodeNext`: relative imports end in `.js`**, even when the file is `.ts`
@@ -159,9 +164,11 @@ npm run build                  # compile to dist/
 npx prisma migrate dev         # create a new migration after changing the schema
 npx prisma migrate deploy      # apply pending migrations (production and CI)
 npx prisma studio              # inspect the database
-npx prisma db seed             # demo account and sample cases
+npx prisma db seed             # demo account (sample cases optional, see #12)
 
 npm test                       # Vitest: unit and integration
+npm run test:unit              # no database, no Docker
+npm run test:integration       # real PostgreSQL: run npm run db:up first
 npm run test:watch
 npm run lint
 npx tsc --noEmit               # type check without emitting
@@ -171,20 +178,44 @@ npx tsc --noEmit               # type check without emitting
 
 ## Testing
 
-**Integration is the bulk.** Supertest against the exported app — no port is opened, which
-is why `app.ts` never calls `listen()`. It exercises the whole chain: route, middlewares,
-service, Prisma, real PostgreSQL. A wrong `where` clause fails the test.
+**Two kinds, told apart by one question: does it use the database?**
 
-**A real database, never a mock.** Tables are truncated before each test. Each test creates
-the data it needs; there is no shared seed, because a test whose data is not visible in the
-test cannot be read.
+| | Unit | Integration |
+|---|---|---|
+| Uses the database | No | Yes, a real PostgreSQL |
+| File name | `*.test.ts` | `*.test.ts` |
+| Lives | In `src/`, next to the file it tests | In `tests/integration/`, one file per module |
+| Needs Docker | No | Yes |
+| Runs | All files at once | **One file at a time** |
+| Command | `npm run test:unit` | `npm run test:integration` |
+
+Supertest appears in both: it sends HTTP requests to the app, served by the test itself on
+a temporary port of `127.0.0.1` — which is why `app.ts` never calls `listen()`. What makes a
+test integration is the database, not Supertest.
+
+**Integration is the bulk.** It exercises the whole chain: route, middlewares, service,
+Prisma, real PostgreSQL. A wrong `where` clause fails the test. An integration test may use
+other modules to set itself up — the cases tests sign in through `auth` — and is named after
+the module it checks: `tests/integration/cases.test.ts`. The folder, not a suffix, says it is
+integration: Vitest picks each kind by its path.
+
+**A real database, never a mock.** Every table is emptied before each integration test. The
+files run one at a time because they share that one database: two at once would empty each
+other's tables mid-test. Each test creates the data it needs; there is no shared seed,
+because a test whose data is not visible in the test cannot be read.
 
 **Only the storage is substituted**, through `StoragePort`, because it cannot be run
 locally. That is the rule: abstract what you cannot execute, use the real thing when you
 can.
 
-**Unit tests for pure functions only:** MIME allowlist, size limit, key sanitising, token
-signing and verification, DTO mapping, query parameter parsing.
+**Unit tests never leave the process** — no database, no network, no file system (Michael
+Feathers' rule, *Working Effectively with Legacy Code*). A temporary port on `127.0.0.1`
+does not count: the request goes out and comes back to the same process. MIME allowlist,
+size limit, key sanitising, token signing and verification, DTO mapping, query parameter
+parsing — middlewares tested on a throwaway app, like `validate` or `requireAuth`, and
+routes that never query, like `/auth/me`, tested on the real app.
+Their `DATABASE_URL` points nowhere, so a unit test that queries by mistake fails instead
+of touching real data.
 
 **The test name is descriptive; the requirement id goes in a comment above it.** When a
 test fails you read its name, and `grep RF-07` finds the comment just the same.

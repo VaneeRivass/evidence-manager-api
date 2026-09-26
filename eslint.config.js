@@ -1,8 +1,9 @@
 import js from '@eslint/js'
 import ts from 'typescript-eslint'
 import prettier from 'eslint-config-prettier'
+import { defineConfig } from 'eslint/config'
 
-export default ts.config(
+export default defineConfig(
   js.configs.recommended,
   ...ts.configs.recommendedTypeChecked,
   {
@@ -35,6 +36,10 @@ export default ts.config(
 
       // A forgotten console.log. Logging goes through pino.
       'no-console': ['error', { allow: ['warn', 'error'] }],
+
+      // One import per module: two lines from the same file split what it
+      // gives this one, and a merge can leave both behind.
+      'no-duplicate-imports': 'error',
 
       'no-unused-vars': 'off',
       '@typescript-eslint/no-unused-vars': [
