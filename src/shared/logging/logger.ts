@@ -8,8 +8,8 @@ import {
   type Logger,
 } from 'pino'
 import { pinoHttp, type HttpLogger } from 'pino-http'
-import { env } from './config/env.js'
-import { AppError, ValidationError } from './errors/app-error.js'
+import { env } from '../config/env.js'
+import { AppError, ValidationError } from '../errors/app-error.js'
 
 // One place assembles both loggers. The app calls it with the defaults; the
 // tests call it with an array as destination and read what would be logged,

@@ -151,14 +151,15 @@ there.
 ```
 src/
 ├── modules/
-│   ├── auth/     routes · controller · service · schema
+│   ├── auth/     routes · controller · service · schema · session · require-auth
 │   ├── cases/    routes · controller · service · schema · mapper
 │   └── files/    routes · controller · service · storage.port · r2-storage.adapter
-├── shared/
-│   ├── errors/       app-error · error-handler (RFC 9457)
-│   ├── middleware/   require-auth · load-owned-case · validate
+├── shared/       infrastructure only
 │   ├── config/       env.ts
-│   └── prisma.ts
+│   ├── database/     prisma.ts
+│   ├── errors/       app-error · error-codes · error-handler (RFC 9457)
+│   ├── logging/      logger.ts
+│   └── middleware/   load-owned-case · validate
 ├── app.ts        builds and exports the app. Never calls listen()
 └── server.ts     app.listen()        → local and Render
 

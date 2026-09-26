@@ -27,7 +27,7 @@ Read before writing or changing code:
 |---|---|
 | Runtime | Node.js 22 · TypeScript in strict mode |
 | HTTP | **Express 5** — it captures async errors on its own; v4 leaves the request hanging |
-| Database | PostgreSQL (Neon) + **Prisma 7** through `@prisma/adapter-pg`. Connection strings live in `prisma.config.ts` (CLI) and `src/shared/prisma.ts` (runtime), never in `schema.prisma`. The client is generated into `src/generated/prisma` — not committed |
+| Database | PostgreSQL (Neon) + **Prisma 7** through `@prisma/adapter-pg`. Connection strings live in `prisma.config.ts` (CLI) and `src/shared/database/prisma.ts` (runtime), never in `schema.prisma`. The client is generated into `src/generated/prisma` — not committed |
 | Storage | `@aws-sdk/client-s3` + `@aws-sdk/s3-request-presigner` against Cloudflare R2 |
 | Validation | **Zod** — the schema is the validator, the TypeScript type and the OpenAPI source |
 | Identity | **argon2** for hashing · **jose** for signing and verifying tokens |
@@ -42,13 +42,17 @@ Read before writing or changing code:
 src/
 ├── modules/
 │   ├── auth/     auth.routes · auth.controller · auth.service · auth.schema
+│   │             session        the session cookie and its token: name, attributes, sign, verify
+│   │             require-auth   the middleware that reads it
+│   │             express.d      declares req.user, the session
 │   ├── cases/    cases.routes · cases.controller · cases.service · cases.schema · cases.mapper
 │   └── files/    files.routes · files.controller · files.service · storage.port · r2-storage.adapter
-├── shared/
-│   ├── errors/       app-error · error-codes · error-handler (RFC 9457)
-│   ├── middleware/   require-auth · load-owned-case · validate
+├── shared/       infrastructure any module uses, knowing nothing of the business
 │   ├── config/       env.ts — a Zod schema over process.env
-│   └── prisma.ts     single client instance
+│   ├── database/     prisma.ts — single client instance
+│   ├── errors/       app-error · error-codes · error-handler (RFC 9457)
+│   ├── logging/      logger.ts — pino + pino-http, with redaction
+│   └── middleware/   load-owned-case · validate
 ├── app.ts        builds and EXPORTS the app. Never calls listen()
 └── server.ts     app.listen()        → local and Render
 
@@ -61,6 +65,12 @@ on its own.
 
 **Organised by feature, not by file type.** Working on cases touches four files that sit
 together. **Not hexagonal layers**: see `docs/adr/0006`.
+
+**`shared/` is infrastructure only.** Whatever belongs to one feature lives in that
+module, even when other modules use it — the session is auth's, `requireAuth` included.
+`load-owned-case` stays in `shared/middleware/` because both `cases` and `files` routes
+need it. **Error codes stay central** in `shared/errors/error-codes.ts`: they are the
+contract with the client, and one list is what the client switches on.
 
 **Controllers translate HTTP and hold no business rules.** Services hold the rules and know
 nothing about `req` or `res`, which is what makes them testable without a server.
