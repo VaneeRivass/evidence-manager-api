@@ -164,7 +164,7 @@ npm run build                  # compile to dist/
 npx prisma migrate dev         # create a new migration after changing the schema
 npx prisma migrate deploy      # apply pending migrations (production and CI)
 npx prisma studio              # inspect the database
-npx prisma db seed             # demo account (sample cases optional, see #12)
+npx prisma db seed             # demo account (sample cases optional, see #22)
 
 npm test                       # Vitest: unit and integration
 npm run test:unit              # no database, no Docker
