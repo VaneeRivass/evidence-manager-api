@@ -1,37 +1,37 @@
 import express from 'express'
 import request from 'supertest'
-import { describe, expect, it } from 'vitest'
+import { afterAll, describe, expect, it } from 'vitest'
 import { app } from '../../app.js'
+import { listen, problemOf } from '../../../tests/helpers.js'
 import { httpLogger } from '../logging/logger.js'
 import { PayloadTooLarge } from './app-error.js'
 import { ErrorCode } from './error-codes.js'
 import { errorHandler } from './error-handler.js'
 
 // No route throws these yet, so a minimal app with the real middlewares does.
-const probe = express()
-probe.use(httpLogger)
-probe.get('/bug', () => {
+const testApp = express()
+testApp.use(httpLogger)
+testApp.get('/bug', () => {
   throw new TypeError("Cannot read properties of undefined (reading 'userId')")
 })
-probe.get('/with-params', () => {
+testApp.get('/with-params', () => {
   throw PayloadTooLarge(ErrorCode.PAYLOAD_TOO_LARGE, 'Body is 19 MB', {
     max: 102400,
   })
 })
-probe.use(errorHandler)
+testApp.use(errorHandler)
+
+const server = await listen(app)
+afterAll(() => server.close())
+const testAppServer = await listen(testApp)
+afterAll(() => testAppServer.close())
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
-
-// Splits the id, which changes on every request, from the rest of the body.
-const problemOf = (res: request.Response) => {
-  const { requestId, ...problem } = res.body as Record<string, unknown>
-  return { requestId, problem }
-}
 
 describe('error handler', () => {
   // RF-21 · RF-22
   it('answers an unknown route with a 404 problem document', async () => {
-    const res = await request(app).get('/does-not-exist')
+    const res = await request(server).get('/does-not-exist')
 
     expect(res.status).toBe(404)
     expect(res.headers['content-type']).toMatch(/^application\/problem\+json/)
@@ -46,7 +46,7 @@ describe('error handler', () => {
 
   // RF-23
   it('returns the code and params of an AppError', async () => {
-    const res = await request(probe).get('/with-params')
+    const res = await request(testAppServer).get('/with-params')
 
     expect(res.status).toBe(413)
     expect(res.body).toMatchObject({
@@ -57,7 +57,7 @@ describe('error handler', () => {
 
   // RF-21 · the body is read only by the route that validates it
   it('answers an unknown route with a 404 even when its body is malformed', async () => {
-    const res = await request(app)
+    const res = await request(server)
       .post('/does-not-exist')
       .set('Content-Type', 'application/json')
       .send('{"broken"')
@@ -68,7 +68,7 @@ describe('error handler', () => {
 
   // RNF-07
   it('answers an unexpected failure with a 500 that reveals nothing', async () => {
-    const res = await request(probe).get('/bug')
+    const res = await request(testAppServer).get('/bug')
 
     expect(res.status).toBe(500)
     const { requestId, problem } = problemOf(res)
@@ -83,7 +83,7 @@ describe('error handler', () => {
 
   // RF-22
   it('ignores a request id sent by the client', async () => {
-    const res = await request(app)
+    const res = await request(server)
       .get('/does-not-exist')
       .set('X-Request-Id', 'planted')
 
