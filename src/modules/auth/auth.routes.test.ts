@@ -1,7 +1,7 @@
 import request from 'supertest'
 import { describe, expect, it } from 'vitest'
 import { app } from '../../app.js'
-import { signSessionToken } from './auth.service.js'
+import { signSessionToken } from './session.js'
 
 // Exercises the real app: authRouter, requireAuth and app.ts wired together,
 // not a stand-in router. Neither route queries the database (RF-03, RF-04),

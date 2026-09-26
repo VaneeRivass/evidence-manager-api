@@ -1,11 +1,8 @@
 import { jwtVerify, SignJWT } from 'jose'
 import { describe, expect, it } from 'vitest'
 import { env } from '../../shared/config/env.js'
-import {
-  signSessionToken,
-  toPublicUser,
-  verifySessionToken,
-} from './auth.service.js'
+import { toPublicUser } from './auth.service.js'
+import { signSessionToken, verifySessionToken } from './session.js'
 
 // A signed-up user as the database returns it, and the key the service signs
 // with — rebuilt here from the secret, so the tests check against the secret

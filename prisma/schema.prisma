@@ -1,6 +1,6 @@
 // Prisma 7: no connection string lives here. See docs/adr/0002.
 //   DIRECT_URL   → prisma.config.ts, for the CLI (migrations)
-//   DATABASE_URL → src/shared/prisma.ts, through @prisma/adapter-pg (queries)
+//   DATABASE_URL → src/shared/database/prisma.ts, through @prisma/adapter-pg (queries)
 
 generator client {
   provider     = "prisma-client"

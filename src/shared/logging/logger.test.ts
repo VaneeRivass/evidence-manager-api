@@ -2,11 +2,11 @@ import express from 'express'
 import request from 'supertest'
 import { beforeEach, describe, expect, it } from 'vitest'
 import * as z from 'zod'
-import { ValidationError } from './errors/app-error.js'
-import { FieldCode } from './errors/error-codes.js'
-import { errorHandler, notFoundHandler } from './errors/error-handler.js'
+import { ValidationError } from '../errors/app-error.js'
+import { FieldCode } from '../errors/error-codes.js'
+import { errorHandler, notFoundHandler } from '../errors/error-handler.js'
 import { createLoggers } from './logger.js'
-import { validate } from './middleware/validate.js'
+import { validate } from '../middleware/validate.js'
 
 // The app's own loggers, writing to an array instead of stdout, and at info:
 // the test run silences the real ones.

@@ -1,8 +1,8 @@
 import express from 'express'
 import request from 'supertest'
 import { describe, expect, it } from 'vitest'
-import { signSessionToken } from '../../modules/auth/auth.service.js'
-import { errorHandler } from '../errors/error-handler.js'
+import { signSessionToken } from './session.js'
+import { errorHandler } from '../../shared/errors/error-handler.js'
 import { requireAuth } from './require-auth.js'
 
 // Answers with whatever requireAuth left on the request, so each test sees
