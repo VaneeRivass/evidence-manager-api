@@ -141,6 +141,13 @@ There is no cleanup process: serverless has no background jobs.
 **Emails are normalised to lowercase** before storing and before querying. Passwords are
 validated between 8 and 72 bytes.
 
+**Nothing leaves in the database's shape.** Every module maps what it returns through an
+explicit mapper that **names the fields that go out**, never the ones it hides: `toPublicUser`
+for users, `cases.mapper.ts` for cases. A column added to the schema tomorrow does not leak
+on its own. An enum's values are not copied into a validator either: they are read from
+`src/generated/prisma/enums.ts`, so a state added to the schema cannot be rejected by a
+list someone forgot to update.
+
 **`passwordHash` never leaves.** Not in a response, not in a log. Pino redacts
 `authorization`, `cookie`, the response's `set-cookie` (it carries the session token) and
 any `password` field.

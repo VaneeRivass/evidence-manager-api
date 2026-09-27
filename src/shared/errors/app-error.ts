@@ -38,8 +38,11 @@ export type FieldError = { field: string; code: FieldCode; params?: Params }
 // 400 with a per-field breakdown, instead of the single top-level `params`
 // every other AppError carries. error-handler.ts reads `.errors` off it.
 export class ValidationError extends AppError {
-  constructor(readonly errors: FieldError[]) {
-    super(400, ErrorCode.VALIDATION_ERROR, 'Invalid request body')
+  constructor(
+    readonly errors: FieldError[],
+    message = 'Invalid request body',
+  ) {
+    super(400, ErrorCode.VALIDATION_ERROR, message)
     this.name = 'ValidationError'
   }
 }
