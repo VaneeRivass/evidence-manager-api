@@ -17,6 +17,12 @@ export default defineConfig({
       // The tests expect the default 8 hours, whatever a local .env sets it
       // to while watching a session expire.
       SESSION_TTL_SECONDS: String(8 * 60 * 60),
+      // Required at boot (RNF-11) but never used: tests hand the files service
+      // the in-memory double, so these only need to exist, not to work.
+      S3_ENDPOINT: 'https://test.r2.cloudflarestorage.com',
+      S3_BUCKET: 'test-bucket',
+      S3_ACCESS_KEY_ID: 'test-access-key-id',
+      S3_SECRET_ACCESS_KEY: 'test-secret-access-key',
     },
     projects: [
       {
