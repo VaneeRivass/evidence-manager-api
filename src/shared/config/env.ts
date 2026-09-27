@@ -20,6 +20,32 @@ const schema = z.object({
   LOG_LEVEL: z
     .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'])
     .default('info'),
+  // Cloudflare R2, spoken over the S3 protocol. No default: each account has
+  // its own. See docs/adr/0004.
+  S3_ENDPOINT: z.url(),
+  S3_BUCKET: z.string().min(1),
+  S3_ACCESS_KEY_ID: z.string().min(1),
+  S3_SECRET_ACCESS_KEY: z.string().min(1),
+  // RF-10 · checked here on the declared size, and again for real with
+  // HeadObject on confirmation (RF-11) — the same value, read once.
+  MAX_FILE_SIZE_BYTES: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(5 * 1024 * 1024),
+  // RF-10 · a comma-separated list in the environment, an array once parsed —
+  // the allowlist itself, not a string every caller has to split. Lowercase,
+  // because MIME types ignore case.
+  ALLOWED_MIME_TYPES: z
+    .string()
+    .default('image/jpeg,image/png,application/pdf')
+    .transform((value) =>
+      value
+        .split(',')
+        .map((type) => type.trim().toLowerCase())
+        .filter(Boolean),
+    )
+    .pipe(z.array(z.string()).min(1)),
 })
 
 type Env = z.infer<typeof schema>
