@@ -35,6 +35,10 @@ const toFieldError = (issue: z.core.$ZodIssue): FieldError => {
       }
     case 'invalid_format':
       return { field, code: FieldCode.INVALID_FORMAT }
+    // A rule about the body as a whole, such as RF-08a's empty edit: the
+    // schema names the code, since no length or format describes it.
+    case 'custom':
+      return { field, code: issue.params?.code as FieldCode }
     default:
       return { field, code: FieldCode.INVALID_TYPE }
   }
@@ -79,13 +83,39 @@ const readJsonBody = (req: Request, res: Response): Promise<void> =>
     })
   })
 
+// The step every validator shares: the parsed value, or a 400 naming each
+// invalid field. The message only tells the log which part of the request
+// failed.
+const parseOrThrow = <S extends z.ZodType>(
+  schema: S,
+  data: unknown,
+  message: string,
+): z.output<S> => {
+  const result = schema.safeParse(data)
+
+  if (!result.success) {
+    throw new ValidationError(
+      result.error.issues.flatMap(toFieldErrors),
+      message,
+    )
+  }
+
+  return result.data
+}
+
 // Reads the body and validates it against `schema`, replacing it with the
 // parsed (and possibly transformed, e.g. lower-cased) value on success. See
 // docs/requirements.md RNF-04 and RNF-08, and the middleware order note
-// in section 3: this runs before any query touches the database.
+// in section 3: this runs before any query touches the database. Typed with
+// the schema's output: a handler expecting fields the schema does not
+// guarantee does not compile.
 export const validate =
-  (schema: z.ZodType): RequestHandler =>
-  async (req, res, next) => {
+  <S extends z.ZodType>(schema: S) =>
+  async (
+    req: Request<Record<string, string>, unknown, z.output<S>>,
+    res: Response,
+    next: NextFunction,
+  ): Promise<void> => {
     await readJsonBody(req, res)
 
     // The parser leaves no body when there is none, or when the Content-Type
@@ -94,19 +124,12 @@ export const validate =
       throw BadRequest(ErrorCode.UNREADABLE_BODY, 'Request body is not JSON')
     }
 
-    const result = schema.safeParse(req.body)
-
-    if (!result.success) {
-      throw new ValidationError(result.error.issues.flatMap(toFieldErrors))
-    }
-
-    req.body = result.data
+    req.body = parseOrThrow(schema, req.body, 'Invalid request body')
     next()
   }
 
 // Like validate, for the query string. Express 5 will not let req.query be
-// replaced, so the result goes to res.locals.query, typed with the schema's
-// output: a handler expecting another shape does not compile.
+// replaced, so the result goes to res.locals.query, typed the same way.
 export const validateQuery =
   <S extends z.ZodType>(schema: S) =>
   (
@@ -114,15 +137,15 @@ export const validateQuery =
     res: Response<unknown, { query: z.output<S> }>,
     next: NextFunction,
   ): void => {
-    const result = schema.safeParse(req.query)
+    res.locals.query = parseOrThrow(schema, req.query, 'Invalid query string')
+    next()
+  }
 
-    if (!result.success) {
-      throw new ValidationError(
-        result.error.issues.flatMap(toFieldErrors),
-        'Invalid query string',
-      )
-    }
-
-    res.locals.query = result.data
+// RF-07a · the route parameters, checked before any query: a malformed id is
+// a bad request, not a missing case. A valid id is used as it came.
+export const validateParams =
+  (schema: z.ZodType): RequestHandler =>
+  (req, _res, next) => {
+    parseOrThrow(schema, req.params, 'Invalid path parameter')
     next()
   }

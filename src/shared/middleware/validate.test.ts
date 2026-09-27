@@ -4,7 +4,7 @@ import { afterAll, describe, expect, it } from 'vitest'
 import * as z from 'zod'
 import { errorHandler } from '../errors/error-handler.js'
 import { listen } from '../../../tests/helpers.js'
-import { validate, validateQuery } from './validate.js'
+import { validate, validateParams, validateQuery } from './validate.js'
 
 const schema = z.object({
   title: z.string().min(3),
@@ -28,6 +28,13 @@ testApp.get(
   ),
   (_req, res) => {
     res.json(res.locals.query)
+  },
+)
+testApp.get(
+  '/test-route/:id',
+  validateParams(z.object({ id: z.uuid() })),
+  (req, res) => {
+    res.json(req.params)
   },
 )
 testApp.use(errorHandler)
@@ -157,6 +164,29 @@ describe('validateQuery', () => {
     expect(res.body).toMatchObject({
       code: 'VALIDATION_ERROR',
       errors: [{ field: 'stauts', code: 'UNKNOWN_FIELD' }],
+    })
+  })
+})
+
+describe('validateParams', () => {
+  // RF-07a · the handler runs only for a well-formed id
+  it('lets a well-formed id through', async () => {
+    const id = crypto.randomUUID()
+
+    const res = await request(server).get(`/test-route/${id}`)
+
+    expect(res.status).toBe(200)
+    expect(res.body).toEqual({ id })
+  })
+
+  // RF-07a · a malformed id is a bad request, not a missing case
+  it('answers a malformed id with a 400 naming it', async () => {
+    const res = await request(server).get('/test-route/not-a-uuid')
+
+    expect(res.status).toBe(400)
+    expect(res.body).toMatchObject({
+      code: 'VALIDATION_ERROR',
+      errors: [{ field: 'id', code: 'INVALID_FORMAT' }],
     })
   })
 })
