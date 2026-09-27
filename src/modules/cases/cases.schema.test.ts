@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { createCaseSchema, listCasesQuery } from './cases.schema.js'
+import {
+  caseParams,
+  createCaseSchema,
+  listCasesQuery,
+  updateCaseSchema,
+} from './cases.schema.js'
 
 describe('createCaseSchema', () => {
   // RF-05 · trimmed before being validated
@@ -131,4 +136,53 @@ describe('listCasesQuery', () => {
       listCasesQuery.safeParse({ status: ['OPEN', 'CLOSED'] }).success,
     ).toBe(false)
   })
+})
+
+describe('caseParams', () => {
+  // RF-07a
+  it('accepts a uuid and rejects anything else', () => {
+    expect(caseParams.safeParse({ id: crypto.randomUUID() }).success).toBe(true)
+    expect(caseParams.safeParse({ id: 'not-a-uuid' }).success).toBe(false)
+  })
+})
+
+describe('updateCaseSchema', () => {
+  // RF-08 · any one field on its own is a valid edit
+  it('accepts a single field', () => {
+    expect(updateCaseSchema.parse({ description: 'Updated' })).toEqual({
+      description: 'Updated',
+    })
+  })
+
+  // RF-08 · the rules of creation: trimmed, status in any case
+  it('trims the text and reads the status in any case', () => {
+    expect(
+      updateCaseSchema.parse({ title: '  Phishing  ', status: 'closed' }),
+    ).toEqual({ title: 'Phishing', status: 'CLOSED' })
+  })
+
+  // RF-08 · the same limits and characters as creation
+  it.each([
+    { title: '   ' },
+    { title: 'a'.repeat(121) },
+    { description: 'a\u0000b' },
+    { status: 'PENDING' },
+  ])('rejects %o', (body) => {
+    expect(updateCaseSchema.safeParse(body).success).toBe(false)
+  })
+
+  // RF-08 · the owner and the file never come from the body
+  it('drops every field it does not know', () => {
+    expect(
+      updateCaseSchema.parse({ title: 'Phishing', userId: 'someone-else' }),
+    ).toEqual({ title: 'Phishing' })
+  })
+
+  // RF-08a · nothing to change would still move the update timestamp
+  it.each([{}, { userId: 'someone-else' }])(
+    'rejects %o, which has nothing to change',
+    (body) => {
+      expect(updateCaseSchema.safeParse(body).success).toBe(false)
+    },
+  )
 })

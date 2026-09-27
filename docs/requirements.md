@@ -32,10 +32,11 @@ every requirement is defined in exactly one file.
 | **RF-06** | List returns `200` with `{ items, total }`: `items` holds **only the authenticated user's cases**, excluding deleted ones, at most 100 per response; `total` counts every case matching the same filter, so the client can tell when some were left out. Optional filter `status` (`OPEN` or `CLOSED`; without it, both), **accepted in any case** — `closed` and `CLOSED` are the same filter, and the response always carries the uppercase form. Optional ordering `sort`: `updatedAt` (default) or `createdAt`, newest first — the direction is fixed, not a parameter. Ties are broken by id, so the same request always returns the same order. **Any other parameter is a `400` that names it**: otherwise a misspelled `?stauts=CLOSED` would return every case, as if the filter had been applied. |
 | **RF-07** | Read one returns `200`. Non-existent returns `404`. Belonging to another user returns `403`. |
 | **RF-07a** | A malformed identifier returns `400`, **before querying the database**. It differs from `404`: the request is malformed, not the resource missing. |
-| **RF-08** | Update title, description or status returns `200`. Invalid returns `400`. Another user's returns `403`. **`CLOSED → OPEN` is allowed.** |
-| **RF-08a** | An empty body, or one with no recognised field, returns `400`. Without this rule the request would succeed without changing anything **yet alter the update timestamp**, pushing the case to the top of the list for no reason. |
+| **RF-08** | Update title, description or status returns `200`. Invalid returns `400`. Another user's returns `403`. **`CLOSED → OPEN` is allowed.** The fields follow the rules of creation: trimmed, the same limits, no null character, and the status accepted in any case. Any other field in the body is ignored, as in RF-05. |
+| **RF-08a** | An empty body, or one with no recognised field, returns `400` with the field code `NOTHING_TO_CHANGE`. Without this rule the request would succeed without changing anything **yet alter the update timestamp**, pushing the case to the top of the list for no reason. |
+| **RF-08b** | **A body whose values are the ones already stored does not touch the record**: it returns `200` with the case as it is, and the update timestamp stays where it was. It is not an error — the client asked for a state the case already holds — but writing it would reorder the list for nothing. This is what happens when a form is opened and saved without typing. |
 | **RF-09** | Delete returns `204`. The object is destroyed in storage **first**, then the record is marked as deleted and its file reference cleared. If destroying the object fails, **the database is not touched** and an error is returned: retrying is safe, because deleting an object that no longer exists does not fail. |
-| **RF-09b** | **A deleted case does not exist for the API.** Reading, updating or deleting it again returns `404`, even knowing its identifier, and it never appears in the list. The guarantee lives in the middleware that loads the case, which every `/cases/:id` route passes through — not route by route. |
+| **RF-09b** | **A deleted case does not exist for the API.** Reading, updating or deleting it again returns `404`, even knowing its identifier, and it never appears in the list. Also when it is deleted **between the check and the write**, by another request in flight: a double-clicked delete answers `404`, never a `500`. The guarantee lives in the middleware that loads the case, which every `/cases/:id` route passes through — not route by route. |
 
 Every endpoint that returns a case returns it in this shape: the case's fields as the
 brief names them, plus the file's name, size and type. Only the deletion mark stays inside —
@@ -90,6 +91,9 @@ link.
   "requestId": "9bed7892-..."
 }
 ```
+
+When the problem is the body as a whole rather than one of its fields — an array instead
+of an object, or an edit with nothing to change — `field` is `(root)`.
 
 An error that is not tied to a field carries its `params` at the top level:
 
@@ -361,6 +365,18 @@ become indistinguishable, although any count treats them separately.
 
 **How it would be resolved.** Widen the status enum and add a transition machine. With two
 states that machine has nothing to forbid; it only makes sense from three onwards.
+
+### A `403` confirms that a case exists
+
+Answering `403` for another user's case, as the brief asks, says something a `404` would
+not: that the identifier belongs to a real case. Nothing else leaks — not its title, its
+state, or its owner.
+
+It does not add up to a way in. Identifiers are v4 uuids, 122 random bits, so they cannot
+be walked: the only way to hold one is for someone to pass it on, and by then the `403`
+confirms what they already knew. **How it would be resolved.** Answer `404` for anything
+that is not yours, which is what GitHub does with a private repository — at the cost of a
+client that can no longer tell a wrong identifier from a borrowed one.
 
 ### No change log
 

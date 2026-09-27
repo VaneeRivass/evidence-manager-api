@@ -2,9 +2,17 @@ import request from 'supertest'
 import { afterAll, describe, expect, it } from 'vitest'
 import { app } from '../../src/app.js'
 import { prisma } from '../../src/shared/database/prisma.js'
-import type { Prisma } from '../../src/generated/prisma/client.js'
+import type {
+  Case as CaseRow,
+  Prisma,
+} from '../../src/generated/prisma/client.js'
 import type { Session } from '../../src/modules/auth/session.js'
 import type { PublicCase } from '../../src/modules/cases/cases.mapper.js'
+import {
+  deleteCase as deleteCaseRow,
+  updateCase as updateCaseRow,
+} from '../../src/modules/cases/cases.service.js'
+import { AppError } from '../../src/shared/errors/app-error.js'
 import { createUser } from '../integration-setup.js'
 import { listen, sessionCookieOf, withSession } from '../helpers.js'
 
@@ -47,6 +55,15 @@ const createCase = ({ cookie }: Signed, body: object) =>
 
 const listCases = ({ cookie }: Signed, query = '') =>
   request(server).get(`/cases${query}`).set('Cookie', cookie)
+
+const readCase = ({ cookie }: Signed, id: string) =>
+  request(server).get(`/cases/${id}`).set('Cookie', cookie)
+
+const updateCase = ({ cookie }: Signed, id: string, body: object) =>
+  request(server).patch(`/cases/${id}`).set('Cookie', cookie).send(body)
+
+const deleteCase = ({ cookie }: Signed, id: string) =>
+  request(server).delete(`/cases/${id}`).set('Cookie', cookie)
 
 const titlesOf = (body: unknown) =>
   (body as { items: PublicCase[] }).items.map(({ title }) => title)
@@ -301,5 +318,254 @@ describe('GET /cases', () => {
     const res = await request(server).get('/cases')
 
     expect(res.status).toBe(401)
+  })
+})
+
+// RF-09b · the three ways into one case: every guard test runs against each,
+// so a route mounted without loadOwnedCase fails here.
+describe.each([
+  { route: 'GET', send: readCase },
+  {
+    route: 'PATCH',
+    send: (user: Signed, id: string) => updateCase(user, id, { title: 'New' }),
+  },
+  { route: 'DELETE', send: deleteCase },
+])('$route /cases/:id', ({ send }) => {
+  // RF-07a · a bad request, not a missing case
+  it('answers 400 for a malformed id', async () => {
+    const owner = await signIn()
+
+    const res = await send(owner, 'not-a-uuid')
+
+    expect(res.status).toBe(400)
+    expect(res.body).toMatchObject({ errors: [{ field: 'id' }] })
+  })
+
+  // RF-07
+  it('answers 404 for a case that does not exist', async () => {
+    const owner = await signIn()
+
+    const res = await send(owner, crypto.randomUUID())
+
+    expect(res.status).toBe(404)
+    expect(res.body).toMatchObject({ code: 'CASE_NOT_FOUND' })
+  })
+
+  // RF-09b · even knowing its id
+  it('answers 404 for a deleted case', async () => {
+    const owner = await signIn()
+    const { id } = await seed(owner.userId, { deletedAt: new Date() })
+
+    const res = await send(owner, id)
+
+    expect(res.status).toBe(404)
+    expect(res.body).toMatchObject({ code: 'CASE_NOT_FOUND' })
+  })
+
+  // RF-07 · RNF-01
+  it('answers 403 for someone else\u2019s case, and leaves it as it was', async () => {
+    const owner = await signIn()
+    const stranger = await signIn()
+    const before = await seed(owner.userId, {})
+
+    const res = await send(stranger, before.id)
+
+    expect(res.status).toBe(403)
+    expect(res.body).toMatchObject({ code: 'CASE_FORBIDDEN' })
+    expect(
+      await prisma.case.findUniqueOrThrow({ where: { id: before.id } }),
+    ).toEqual(before)
+  })
+
+  // RNF-01
+  it('answers 401 without a session', async () => {
+    const owner = await signIn()
+    const { id } = await seed(owner.userId, {})
+
+    const res = await send({ cookie: '', userId: '' }, id)
+
+    expect(res.status).toBe(401)
+  })
+})
+
+describe('GET /cases/:id', () => {
+  // RF-07 · the same shape as every other case response
+  it('answers 200 with the case', async () => {
+    const owner = await signIn()
+    const { id } = await seed(owner.userId, { title: 'Phishing' })
+
+    const res = await readCase(owner, id)
+
+    expect(res.status).toBe(200)
+    expect(res.body).toMatchObject({
+      id,
+      title: 'Phishing',
+      userId: owner.userId,
+    })
+    expect(res.body).not.toHaveProperty('deletedAt')
+  })
+})
+
+describe('PATCH /cases/:id', () => {
+  // RF-08 · what is not sent stays as it was
+  it('changes only the fields sent', async () => {
+    const owner = await signIn()
+    const { id } = await seed(owner.userId, {
+      title: 'Old title',
+      description: 'Kept',
+    })
+
+    const res = await updateCase(owner, id, { title: 'New title' })
+
+    expect(res.status).toBe(200)
+    expect(res.body).toMatchObject({ title: 'New title', description: 'Kept' })
+  })
+
+  // RF-08 · no transition rules, and the status in any case
+  it('reopens a closed case', async () => {
+    const owner = await signIn()
+    const { id } = await seed(owner.userId, { status: 'CLOSED' })
+
+    const res = await updateCase(owner, id, { status: 'open' })
+
+    expect(res.status).toBe(200)
+    expect(res.body).toMatchObject({ status: 'OPEN' })
+  })
+
+  // RF-08 · nobody hands their case to someone else
+  it('ignores an owner sent in the body', async () => {
+    const owner = await signIn()
+    const stranger = await signIn()
+    const { id } = await seed(owner.userId, {})
+
+    const res = await updateCase(owner, id, {
+      title: 'New title',
+      userId: stranger.userId,
+    })
+
+    expect(res.status).toBe(200)
+    expect(res.body).toMatchObject({ userId: owner.userId })
+  })
+
+  // RF-08b · the same values are not an error, but writing them would move
+  // the case to the top of the list for nothing
+  it('does not touch the case when the values are the ones stored', async () => {
+    const owner = await signIn()
+    const before = await seed(owner.userId, {
+      title: 'Phishing',
+      status: 'CLOSED',
+    })
+
+    const res = await updateCase(owner, before.id, {
+      title: 'Phishing',
+      status: 'closed',
+    })
+
+    expect(res.status).toBe(200)
+    expect(res.body).toMatchObject({ title: 'Phishing', status: 'CLOSED' })
+    expect(
+      await prisma.case.findUniqueOrThrow({ where: { id: before.id } }),
+    ).toEqual(before)
+  })
+
+  // RF-08b · one field that does differ is still a real edit
+  it('writes when one of the values sent differs', async () => {
+    const owner = await signIn()
+    const before = await seed(owner.userId, { title: 'Phishing' })
+
+    const res = await updateCase(owner, before.id, {
+      title: 'Phishing',
+      description: 'Another description',
+    })
+
+    expect(res.status).toBe(200)
+    expect(res.body).toMatchObject({ description: 'Another description' })
+    expect(
+      (
+        await prisma.case.findUniqueOrThrow({ where: { id: before.id } })
+      ).updatedAt.getTime(),
+    ).toBeGreaterThan(before.updatedAt.getTime())
+  })
+
+  // RF-08a · the case is not touched, so it does not jump to the top
+  it('answers 400 for an edit with nothing to change', async () => {
+    const owner = await signIn()
+    const before = await seed(owner.userId, {})
+
+    const res = await updateCase(owner, before.id, {})
+
+    expect(res.status).toBe(400)
+    expect(res.body).toMatchObject({
+      errors: [{ field: '(root)', code: 'NOTHING_TO_CHANGE' }],
+    })
+    expect(
+      await prisma.case.findUniqueOrThrow({ where: { id: before.id } }),
+    ).toEqual(before)
+  })
+
+  // RF-08 · the rules of creation
+  it('answers 400 for a title made only of spaces', async () => {
+    const owner = await signIn()
+    const { id } = await seed(owner.userId, {})
+
+    const res = await updateCase(owner, id, { title: '   ' })
+
+    expect(res.status).toBe(400)
+  })
+})
+
+describe('DELETE /cases/:id', () => {
+  // RF-09 · RNF-05 · the row stays as a trail; only the file key is cleared
+  it('answers 204 and marks the case, keeping the row', async () => {
+    const owner = await signIn()
+    const { id } = await seed(owner.userId, {
+      fileKey: `users/${owner.userId}/evidence.pdf`,
+      fileName: 'evidence.pdf',
+      fileSize: 5120,
+      fileType: 'application/pdf',
+    })
+
+    const res = await deleteCase(owner, id)
+
+    expect(res.status).toBe(204)
+    expect(
+      await prisma.case.findUniqueOrThrow({ where: { id } }),
+    ).toMatchObject({
+      deletedAt: expect.any(Date) as Date,
+      fileKey: null,
+      fileName: 'evidence.pdf',
+    })
+  })
+
+  // RF-09b · through the API, not a seeded mark
+  it('makes the case answer 404 and leave the list', async () => {
+    const owner = await signIn()
+    const { id } = await seed(owner.userId, {})
+
+    await deleteCase(owner, id)
+
+    expect((await readCase(owner, id)).status).toBe(404)
+    expect((await listCases(owner)).body).toMatchObject({ total: 0 })
+  })
+})
+
+// RF-09b · the guard reads the case, then the write happens: in between, another
+// request can delete it. A double-clicked Delete button reaches this.
+describe('a case deleted between the check and the write', () => {
+  it.each([
+    {
+      action: 'update',
+      run: (item: CaseRow) => updateCaseRow(item, { title: 'New' }),
+    },
+    { action: 'delete', run: (item: CaseRow) => deleteCaseRow(item.id) },
+  ])('answers 404 instead of failing on $action', async ({ run }) => {
+    const owner = await signIn()
+    const item = await seed(owner.userId, { deletedAt: new Date() })
+
+    await expect(run(item)).rejects.toMatchObject({
+      status: 404,
+      code: 'CASE_NOT_FOUND',
+    })
+    await expect(run(item)).rejects.toBeInstanceOf(AppError)
   })
 })
