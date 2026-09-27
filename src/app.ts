@@ -5,6 +5,7 @@ import './shared/config/env.js'
 import { errorHandler, notFoundHandler } from './shared/errors/error-handler.js'
 import { httpLogger } from './shared/logging/logger.js'
 import { authRouter } from './modules/auth/auth.routes.js'
+import { casesRouter } from './modules/cases/cases.routes.js'
 
 // Builds the application and exports it. It never calls listen(): server.ts
 // does that for a long-lived process, api/index.ts hands it to Vercel, and
@@ -21,6 +22,7 @@ app.get('/health', (_req, res) => {
 // No global express.json(): a route reads its body inside validate(), after
 // requireAuth, so an unauthenticated request never pays for parsing it.
 app.use('/auth', authRouter)
+app.use('/cases', casesRouter)
 
 // Last, in this order: no route matched, then whatever was thrown.
 app.use(notFoundHandler)

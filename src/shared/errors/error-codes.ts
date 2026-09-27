@@ -20,6 +20,7 @@ export const FieldCode = {
   TOO_LONG: 'TOO_LONG',
   INVALID_FORMAT: 'INVALID_FORMAT',
   INVALID_TYPE: 'INVALID_TYPE',
+  UNKNOWN_FIELD: 'UNKNOWN_FIELD',
 } as const
 
 export type FieldCode = (typeof FieldCode)[keyof typeof FieldCode]

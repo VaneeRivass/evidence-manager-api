@@ -28,14 +28,38 @@ every requirement is defined in exactly one file.
 
 | ID | Requirement |
 |---|---|
-| **RF-05** | Create a case with title and description, both required, returns `201`. Initial status `OPEN`, no file. |
-| **RF-06** | List returns `200` with `{ items: [...] }`, containing **only the authenticated user's cases**, excluding deleted ones. At most 100 per response. Optional filter by status and ordering by update time, creation time or title; update time descending by default. |
+| **RF-05** | Create a case with title and description, both required, returns `201`. Initial status `OPEN`, no file. Both are **trimmed** of surrounding spaces before being validated, so a title made only of spaces counts as empty: title 1 to 120 characters, description 1 to 2000 — the same limits as the database columns, so an overlong value is a `400` and never reaches the database as a `500`. For the same reason a null character (`\u0000`), which PostgreSQL cannot store, is a `400`. **The owner comes from the session**: any other field in the body — owner, status, file — is ignored, so nobody can create a case in someone else's name or pointing at someone else's file. |
+| **RF-06** | List returns `200` with `{ items, total }`: `items` holds **only the authenticated user's cases**, excluding deleted ones, at most 100 per response; `total` counts every case matching the same filter, so the client can tell when some were left out. Optional filter `status` (`OPEN` or `CLOSED`; without it, both), **accepted in any case** — `closed` and `CLOSED` are the same filter, and the response always carries the uppercase form. Optional ordering `sort`: `updatedAt` (default) or `createdAt`, newest first — the direction is fixed, not a parameter. Ties are broken by id, so the same request always returns the same order. **Any other parameter is a `400` that names it**: otherwise a misspelled `?stauts=CLOSED` would return every case, as if the filter had been applied. |
 | **RF-07** | Read one returns `200`. Non-existent returns `404`. Belonging to another user returns `403`. |
 | **RF-07a** | A malformed identifier returns `400`, **before querying the database**. It differs from `404`: the request is malformed, not the resource missing. |
 | **RF-08** | Update title, description or status returns `200`. Invalid returns `400`. Another user's returns `403`. **`CLOSED → OPEN` is allowed.** |
 | **RF-08a** | An empty body, or one with no recognised field, returns `400`. Without this rule the request would succeed without changing anything **yet alter the update timestamp**, pushing the case to the top of the list for no reason. |
 | **RF-09** | Delete returns `204`. The object is destroyed in storage **first**, then the record is marked as deleted and its file reference cleared. If destroying the object fails, **the database is not touched** and an error is returned: retrying is safe, because deleting an object that no longer exists does not fail. |
 | **RF-09b** | **A deleted case does not exist for the API.** Reading, updating or deleting it again returns `404`, even knowing its identifier, and it never appears in the list. The guarantee lives in the middleware that loads the case, which every `/cases/:id` route passes through — not route by route. |
+
+Every endpoint that returns a case returns it in this shape: the case's fields as the
+brief names them, plus the file's name, size and type. Only the deletion mark stays inside —
+a deleted case does not exist for the API, so it would always be `null`. The file fields
+are `null` until an upload is confirmed. Size is in bytes and type is the MIME type: the
+client decides how to display them. Neither `userId` nor `fileKey` grants anything on its
+own: every case route checks ownership, and the file is only reachable through a signed
+link.
+
+```json
+{
+  "id": "3f9c2a1e-8b4d-4c7a-9e21-5d6f7a8b9c0d",
+  "title": "Phishing campaign impersonating the bank",
+  "description": "Emails received on 24 Sep asking to confirm card details.",
+  "status": "OPEN",
+  "fileKey": "users/8d2e…/cases/3f9c…/5b7a…-phishing-email-headers.pdf",
+  "fileName": "phishing-email-headers.pdf",
+  "fileSize": 5120,
+  "fileType": "application/pdf",
+  "userId": "8d2e4b1a-6c3f-4e9d-a7b2-1f0e9d8c7b6a",
+  "createdAt": "2026-09-24T09:15:00.000Z",
+  "updatedAt": "2026-09-26T11:02:33.000Z"
+}
+```
 
 ### 1.3 Evidence
 
@@ -145,7 +169,7 @@ cover.**
 | `GET` | `/auth/me` | ✓ | — | — | `200` `{ id, email }` | `401` | RF-03 |
 | `POST` | `/auth/logout` | ✓ | — | — | `204` + cookie cleared | `401` | RF-04 |
 | `POST` | `/cases` | ✓ | — | title, description | `201` | `400` `401` | RF-05 |
-| `GET` | `/cases` | ✓ | — | status, order, page, limit | `200` `{items}` | `400` `401` | RF-06 |
+| `GET` | `/cases` | ✓ | — | status, sort | `200` `{ items, total }` | `400` `401` | RF-06 |
 | `GET` | `/cases/:id` | ✓ | ✓ | — | `200` | `400` `401` `403` `404` | RF-07 |
 | `PATCH` | `/cases/:id` | ✓ | ✓ | title, description, status | `200` | `400` `401` `403` `404` | RF-08 |
 | `DELETE` | `/cases/:id` | ✓ | ✓ | — | `204` | `400` `401` `403` `404` `500` | RF-09 |
@@ -415,8 +439,10 @@ candidate if the scope ever widens.
 
 ### Pagination is not exposed in the interface
 
-The listing is bounded on the server and the response uses an envelope that accepts
-pagination fields without breaking consumers. Only the controls are missing.
+The listing is bounded on the server at 100 cases, the most recent first by default. Past
+that, the older ones are not returned — but not silently: `total` tells the client how many
+match, so it can say that some are missing. The envelope accepts pagination fields without
+breaking consumers. Only the page parameters and the controls are missing.
 
 ### `db:up` does not know whether `.env` points at Docker or at Neon
 

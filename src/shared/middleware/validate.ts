@@ -1,4 +1,5 @@
 import express, {
+  type NextFunction,
   type Request,
   type RequestHandler,
   type Response,
@@ -38,6 +39,15 @@ const toFieldError = (issue: z.core.$ZodIssue): FieldError => {
       return { field, code: FieldCode.INVALID_TYPE }
   }
 }
+
+// One entry per unknown key, so the client knows which one to fix.
+const toFieldErrors = (issue: z.core.$ZodIssue): FieldError[] =>
+  issue.code === 'unrecognized_keys'
+    ? issue.keys.map((key) => ({
+        field: [...issue.path, key].join('.'),
+        code: FieldCode.UNKNOWN_FIELD,
+      }))
+    : [toFieldError(issue)]
 
 const BODY_LIMIT_BYTES = 100 * 1024
 
@@ -87,9 +97,32 @@ export const validate =
     const result = schema.safeParse(req.body)
 
     if (!result.success) {
-      throw new ValidationError(result.error.issues.map(toFieldError))
+      throw new ValidationError(result.error.issues.flatMap(toFieldErrors))
     }
 
     req.body = result.data
+    next()
+  }
+
+// Like validate, for the query string. Express 5 will not let req.query be
+// replaced, so the result goes to res.locals.query, typed with the schema's
+// output: a handler expecting another shape does not compile.
+export const validateQuery =
+  <S extends z.ZodType>(schema: S) =>
+  (
+    req: Request,
+    res: Response<unknown, { query: z.output<S> }>,
+    next: NextFunction,
+  ): void => {
+    const result = schema.safeParse(req.query)
+
+    if (!result.success) {
+      throw new ValidationError(
+        result.error.issues.flatMap(toFieldErrors),
+        'Invalid query string',
+      )
+    }
+
+    res.locals.query = result.data
     next()
   }
