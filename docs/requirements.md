@@ -35,7 +35,7 @@ every requirement is defined in exactly one file.
 | **RF-08** | Update title, description or status returns `200`. Invalid returns `400`. Another user's returns `403`. **`CLOSED → OPEN` is allowed.** The fields follow the rules of creation: trimmed, the same limits, no null character, and the status accepted in any case. Any other field in the body is ignored, as in RF-05. |
 | **RF-08a** | An empty body, or one with no recognised field, returns `400` with the field code `NOTHING_TO_CHANGE`. Without this rule the request would succeed without changing anything **yet alter the update timestamp**, pushing the case to the top of the list for no reason. |
 | **RF-08b** | **A body whose values are the ones already stored does not touch the record**: it returns `200` with the case as it is, and the update timestamp stays where it was. It is not an error — the client asked for a state the case already holds — but writing it would reorder the list for nothing. This is what happens when a form is opened and saved without typing. |
-| **RF-09** | Delete returns `204`. The object is destroyed in storage **first**, then the record is marked as deleted and its file reference cleared. If destroying the object fails, **the database is not touched** and an error is returned: retrying is safe, because deleting an object that no longer exists does not fail. A case with no file never asks storage. A file confirmed **between the check and the write** is destroyed too: the write only lands while the case still holds the file reference that was read; otherwise the case is read again and deleted with what it holds now. |
+| **RF-09** | Delete returns `204`. The object is deleted from storage **first**, then the record is marked as deleted and its file reference cleared. If deleting the object fails, **the database is not touched** and an error is returned: retrying is safe, because deleting an object that no longer exists does not fail. A case with no file never asks storage. A file confirmed **between the check and the write** is deleted too: the write only lands while the case still holds the file reference that was read; otherwise the case is read again and deleted with what it holds now. |
 | **RF-09b** | **A deleted case does not exist for the API.** Reading, updating or deleting it again returns `404`, even knowing its identifier, and it never appears in the list. Also when it is deleted **between the check and the write**, by another request in flight: a double-clicked delete answers `404`, never a `500`. The guarantee lives in the middleware that loads the case, which every `/cases/:id` route passes through — not route by route. |
 
 Every endpoint that returns a case returns it in this shape: the case's fields as the
@@ -67,8 +67,8 @@ link.
 | ID | Requirement |
 |---|---|
 | **RF-10** | Request an upload link with file name, type and size, returning `{ uploadUrl, key, expiresIn }`. The type is compared with the allowlist in lowercase — MIME types ignore case — but **signed exactly as sent**, so the client's `PUT` repeats the header it already has; a signature over a value the client never saw would fail with `403` in storage. A type outside the allowlist returns `400` with `FILE_TYPE_NOT_ALLOWED` and `{ allowed }`, the allowlist as one comma-separated string. The declared size is in bytes, a whole number from 1 — an empty file is no evidence — and anything else is a field error on `size`. A declared size above the limit returns `400` with `FILE_TOO_LARGE` and `{ max }` in bytes. Both are rules of the environment, not of the request's shape, so they are top-level codes rather than field errors — the client cannot know the limits in advance and reads them from `params`. A file name longer than **255 bytes** returns `400` — the name limit of common file systems, so any real file fits, while the storage key stays far below its 1024-byte maximum. Another user's case returns `403`. **The allowlist and the size limit are configurable per environment**, not constants in code. The signed key points at a **temporary area** (`pending/`), not at its final location. **A case that already carries a file returns `409` with `FILE_ALREADY_ATTACHED`**: evidence is attached once and never replaced — see *Evidence is never replaced* under Known limitations. |
-| **RF-11** | Confirming the upload persists the file reference **only after verifying against storage**, and without storing anything when the link was signed: the key itself says which user and case it was signed for, since only the API can sign a write to `pending/`. **The key must have exactly the shape `pending/{userId}/{caseId}/{uuid}-{name}`** — the session's user, the case in the URL, one segment after it, and a name exactly as `upload-url` leaves it: sanitised and within 255 bytes — or `400` with `FILE_KEY_MISMATCH`. The shape is checked, not a prefix: `pending/{userId}/{caseId}/../../other/…` starts right but could reach another folder once a client normalises the path. One code covers an invented key, one from another of the user's cases and one from someone else's: the API compares text and cannot tell them apart without querying, so it claims nothing about who owns the key. The `403` stays with the case in the URL. If the object is missing, `400` with `FILE_NOT_UPLOADED`. If its **real size is 0 or over the limit, or its real type is not in the allowlist** (compared in lowercase, and stored in lowercase), **the object is destroyed** and `400` is returned with `FILE_REJECTED`. The reference stored is the final key, the real size and type, and the file name read from the key — what follows `{uuid}-`, already sanitised and within 255 bytes since the link was requested. The real type is not compared with the signed one, which the API does not keep: storage already refused any `PUT` with another type. Confirming the key the case already holds — a double click — returns `200` with the case as it is and destroys nothing; it is checked before asking storage, since the first confirmation already moved the object out of `pending/`. If, before the reference is written, the case was deleted or another confirmation stored a different file, the copy is destroyed and `404` or `409` with `FILE_ALREADY_ATTACHED` is returned: the write only lands on a case still undeleted and without a file; the two objects are destroyed independently and a failure there is logged, never turning the `404` or `409` into a `500`. A double click whose second request finds the object already moved by the first — missing, or gone before the copy — returns `200` too: the case is read again before answering. If the write fails for any other reason (the database timed out), the case is read again: if it holds the new key the copy is kept and the case returned, otherwise it is destroyed, since outside `pending/` nothing else would remove it. |
-| **RF-11b** | Once verified, the object is moved from the temporary area to its final location. **An upload that is never confirmed stays in the temporary area and storage destroys it after 24 hours**, through a bucket lifecycle rule — no scheduled process, which a serverless deployment could not host anyway. |
+| **RF-11** | Confirming the upload persists the file reference **only after verifying against storage**, and without storing anything when the link was signed: the key itself says which user and case it was signed for, since only the API can sign a write to `pending/`. **The key must have exactly the shape `pending/{userId}/{caseId}/{uuid}-{name}`** — the session's user, the case in the URL, one segment after it, and a name exactly as `upload-url` leaves it: sanitised and within 255 bytes — or `400` with `FILE_KEY_MISMATCH`. The shape is checked, not a prefix: `pending/{userId}/{caseId}/../../other/…` starts right but could reach another folder once a client normalises the path. One code covers an invented key, one from another of the user's cases and one from someone else's: the API compares text and cannot tell them apart without querying, so it claims nothing about who owns the key. The `403` stays with the case in the URL. If the object is missing, `400` with `FILE_NOT_UPLOADED`. If its **real size is 0 or over the limit, or its real type is not in the allowlist** (compared in lowercase, and stored in lowercase), **the object is deleted** and `400` is returned with `FILE_REJECTED`. The reference stored is the final key, the real size and type, and the file name read from the key — what follows `{uuid}-`, already sanitised and within 255 bytes since the link was requested. The real type is not compared with the signed one, which the API does not keep: storage already refused any `PUT` with another type. Confirming the key the case already holds — a double click — returns `200` with the case as it is and deletes nothing; it is checked before asking storage, since the first confirmation already moved the object out of `pending/`. If, before the reference is written, the case was deleted or another confirmation stored a different file, the copy is deleted and `404` or `409` with `FILE_ALREADY_ATTACHED` is returned: the write only lands on a case still undeleted and without a file; the two objects are deleted independently and a failure there is logged, never turning the `404` or `409` into a `500`. A double click whose second request finds the object already moved by the first — missing, or gone before the copy — returns `200` too: the case is read again before answering. If the write fails for any other reason (the database timed out), the case is read again: if it holds the new key the copy is kept and the case returned, otherwise it is deleted, since outside `pending/` nothing else would remove it. |
+| **RF-11b** | Once verified, the object is moved from the temporary area to its final location. **An upload that is never confirmed stays in the temporary area and storage deletes it after 24 hours**, through a bucket lifecycle rule — no scheduled process, which a serverless deployment could not host anyway. |
 | **RF-12** | Request a download link, returning `{ downloadUrl, expiresIn }`, a signed URL valid for 60 seconds. A case with no file returns `404` with `FILE_NOT_FOUND`. The link is signed to be **saved, never opened**, under the file's name rather than its key: `Content-Disposition: attachment; filename="…"; filename*=UTF-8''…` (RFC 6266) — the plain form for old clients, ASCII only and without `"`, `\` or `%` (some decode it), and the encoded one so `Evidencia año 2026.pdf` keeps its `ñ`. Being signed, neither can be changed by whoever holds the link. |
 
 ### 1.4 Response contract
@@ -281,7 +281,7 @@ stateDiagram-v2
 
     note right of Deleted
         deletedAt is set.
-        The object IS destroyed.
+        The object IS deleted.
         Every operation → 404 (RF-09b)
     end note
 ```
@@ -313,7 +313,7 @@ sequenceDiagram
     Note over B,S: 3 · Confirm, with real verification
     B->>A: POST /cases/:id/file/complete { key }
     A->>A: key shaped pending/{user}/{THIS case}/{uuid}-{name}?<br/>(else 400 FILE_KEY_MISMATCH)
-    A->>A: does the case already hold this key? (a double click)<br/>→ 200 { case }, nothing destroyed, storage not asked
+    A->>A: does the case already hold this key? (a double click)<br/>→ 200 { case }, nothing deleted, storage not asked
     A->>S: HeadObject(key)
     alt object missing
         S-->>A: 404
@@ -375,7 +375,7 @@ row.
 ### Evidence is never replaced
 
 Once a case carries a file, asking for another upload answers `409`. Replacing it would
-destroy the previous proof and leave no sign that it existed — the opposite of what an
+delete the previous proof and leave no sign that it existed — the opposite of what an
 evidence record is for. Uploading is a `POST`, which adds; changing a case is `PATCH`, and
 it does not reach the file. A wrong attachment is corrected by deleting the case, which
 leaves its trail, and creating a new one.
@@ -416,18 +416,18 @@ would guarantee nothing changed after closing, but not what it said before.
 
 ### File retention
 
-The object is destroyed immediately. Where an attachment is evidentiary material,
+The object is deleted immediately. Where an attachment is evidentiary material,
 retention is usually an obligation with a deadline rather than a preference.
 
 | Option | Why not |
 |---|---|
-| **Immediate destruction** | **Chosen.** It avoids accumulating material that was explicitly asked to be removed |
+| **Immediate deletion** | **Chosen.** It avoids accumulating material that was explicitly asked to be removed |
 | A trash prefix expiring after 30 days | Introduces an intermediate state, and without roles there is nobody to decide a restore |
 | Cold storage for years | Cloudflare R2 offers no archive tier equivalent to Glacier. If long retention were a requirement, that would argue for S3 |
 
-**Guarantee adopted: no file is left orphaned.** The object is destroyed before the
+**Guarantee adopted: no file is left orphaned.** The object is deleted before the
 database is touched; if that fails, the database is untouched and the operation errors.
-Retrying works, because destroying an object that no longer exists does not fail.
+Retrying works, because deleting an object that no longer exists does not fail.
 
 ### The file contents are not inspected
 
@@ -458,7 +458,7 @@ serverless model does not guarantee it.
 
 Only the authentication routes are limited. A signed-in user can ask for upload links in a
 loop and upload to each one, and every upload is a paid storage operation. The damage is
-bounded: an object never confirmed is destroyed after 24 hours, and each weighs at most
+bounded: an object never confirmed is deleted after 24 hours, and each weighs at most
 the size limit. A lock per case — no new link while one awaits confirmation — was
 considered and dropped: it does not stop someone who opens a thousand cases, and it blocks
 the honest user who closed the tab mid-upload until the link expires.

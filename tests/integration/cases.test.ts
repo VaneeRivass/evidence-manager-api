@@ -19,7 +19,7 @@ import { listen } from '../helpers.js'
 // Exercises the real app: the cases routes, requireAuth, the validators and
 // Prisma against PostgreSQL. It signs in through /auth because the session is
 // what decides whose cases these are. Storage is the in-memory double
-// (ADR-0006): deleting a case destroys its file there.
+// (ADR-0006): deleting a case deletes its file there.
 const storage = createInMemoryStorage()
 const server = await listen(createApp(storage))
 afterAll(() => server.close())
@@ -544,7 +544,7 @@ describe('DELETE /cases/:id', () => {
   })
 
   // RF-09 · nothing is left behind in storage
-  it('destroys the case’s file in storage', async () => {
+  it('deletes the case’s file from storage', async () => {
     const owner = await signIn(server)
     const fileKey = `users/${owner.userId}/cases/c1/abc-evidence.pdf`
     storage.simulateUpload(fileKey, {
@@ -560,8 +560,8 @@ describe('DELETE /cases/:id', () => {
   })
 })
 
-// RF-09 · storage refusing to destroy the file, through failingServer.
-describe('DELETE /cases/:id when storage cannot destroy the file', () => {
+// RF-09 · storage refusing to delete the file, through failingServer.
+describe('DELETE /cases/:id when storage cannot delete the file', () => {
   const deleteThrough = ({ cookie }: Signed, id: string) =>
     request(failingServer).delete(`/cases/${id}`).set('Cookie', cookie)
 
@@ -617,10 +617,10 @@ describe('a case deleted between the check and the write', () => {
 })
 
 // RF-09 · the guard read the case with no file; a confirmation stored one
-// before the delete landed. Cleared without destroying it, that file would be
+// before the delete landed. Cleared without deleting it from storage, that file would be
 // an orphan outside pending/, where nothing removes it.
 describe('a file confirmed between the check and the delete', () => {
-  it('destroys that file too', async () => {
+  it('deletes that file from storage too', async () => {
     const owner = await signIn(server)
     const stale = await seed(owner.userId, {})
     const fileKey = `users/${owner.userId}/cases/${stale.id}/abc-evidence.pdf`
