@@ -47,6 +47,7 @@ src/
 │   │             express.d      declares req.user, the session
 │   ├── cases/    cases.routes · cases.controller · cases.service · cases.schema · cases.mapper
 │   └── files/    files.routes · files.controller · files.service · files.schema
+│                 files.middleware  checkDeclaredFile, checkUploadKey: before the case is queried
 │                 storage-key    the storage key: built for an upload, resolved on confirmation
 │                 storage.port · r2-storage.adapter · in-memory-storage.adapter (the tests' double)
 ├── shared/       infrastructure any module uses, knowing nothing of the business
@@ -54,7 +55,7 @@ src/
 │   ├── database/     prisma.ts — single client instance
 │   ├── errors/       app-error · error-codes · error-handler (RFC 9457)
 │   ├── logging/      logger.ts — pino + pino-http, with redaction
-│   └── middleware/   require-owned-case · validate
+│   └── middleware/   require-owned-case · validateBody
 ├── app.ts        createApp(storage) builds the app; `app` is it with R2, the one place storage is chosen. Never calls listen()
 └── server.ts     app.listen()        → local and Render
 
@@ -110,7 +111,7 @@ runs locally, receive what does not.
 router.patch('/:id',
   requireAuth,                 // crypto, no database
   validateParams(idSchema),    // is :id a UUID?     → 400
-  validate(updateCaseSchema),  // read the body, is it valid? → 400 / 413
+  validateBody(updateCaseSchema), // read the body, is it valid? → 400 / 413
   requireOwnedCase,            // NOW the query      → 404 / 403
   update,
 )
@@ -225,7 +226,7 @@ can.
 Feathers' rule, *Working Effectively with Legacy Code*). A temporary port on `127.0.0.1`
 does not count: the request goes out and comes back to the same process. MIME allowlist,
 size limit, key sanitising, token signing and verification, DTO mapping, query parameter
-parsing — middlewares tested on a throwaway app, like `validate` or `requireAuth`, and
+parsing — middlewares tested on a throwaway app, like `validateBody` or `requireAuth`, and
 routes that never query, like `/auth/me`, tested on the real app.
 Their `DATABASE_URL` points nowhere, so a unit test that queries by mistake fails instead
 of touching real data.

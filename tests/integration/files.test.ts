@@ -4,6 +4,7 @@ import { createApp } from '../../src/app.js'
 import { prisma } from '../../src/shared/database/prisma.js'
 import { createFilesService } from '../../src/modules/files/files.service.js'
 import { createInMemoryStorage } from '../../src/modules/files/in-memory-storage.adapter.js'
+import { resolveUploadKey } from '../../src/modules/files/storage-key.js'
 import { type Signed, signIn } from '../integration-setup.js'
 import { listen } from '../helpers.js'
 
@@ -54,7 +55,7 @@ async function uploadFile(
   return key
 }
 
-// pending/{user}/{case}/{name} → users/{user}/cases/{case}/{name}. Written
+// pending/{user}/{case}/{uuid}-{name} → users/{user}/cases/{case}/{uuid}-{name}. Written
 // here on purpose rather than imported: if the service's own resolveUploadKey is
 // wrong, the tests catch it instead of repeating the mistake.
 const expectedFinalKey = (pendingKey: string) =>
@@ -87,7 +88,11 @@ async function uploadedAndStale() {
   const caseId = await createCase(user)
   const key = await uploadFile(user, caseId)
   const stale = await prisma.case.findUniqueOrThrow({ where: { id: caseId } })
-  return { caseId, key, stale }
+  // What checkUploadKey hands the service for this key.
+  const upload = resolveUploadKey(key, user.userId, caseId)
+  if (!upload)
+    throw new Error(`upload-url signed a key it cannot resolve: ${key}`)
+  return { caseId, key, stale, upload }
 }
 
 describe('POST /cases/:id/file/upload-url', () => {
@@ -244,6 +249,37 @@ describe('POST /cases/:id/file/upload-url', () => {
     expect(res.body).toMatchObject({ code: 'CASE_FORBIDDEN' })
   })
 
+  // Middleware order · the type is checked before the case is queried, so a
+  // bad request answers 400 even against someone else's case
+  it('refuses a disallowed type before looking the case up', async () => {
+    const owner = await signIn(server)
+    const caseId = await createCase(owner)
+    const intruder = await signIn(server)
+
+    const res = await requestUploadUrl(intruder, caseId, {
+      ...VALID_UPLOAD,
+      contentType: 'application/x-msdownload',
+    })
+
+    expect(res.status).toBe(400)
+    expect(res.body).toMatchObject({ code: 'FILE_TYPE_NOT_ALLOWED' })
+  })
+
+  // RF-10 · a broken character (half of a pair) would make the storage
+  // library throw while signing; sanitising drops it like a control character
+  it('drops a lone surrogate from the name instead of failing', async () => {
+    const user = await signIn(server)
+    const caseId = await createCase(user)
+
+    const res = await requestUploadUrl(user, caseId, {
+      ...VALID_UPLOAD,
+      fileName: 'a\ud800.pdf',
+    })
+
+    expect(res.status).toBe(200)
+    expect((res.body as { key: string }).key).toMatch(/-a\.pdf$/)
+  })
+
   // RF-10 · evidence is attached once and never replaced
   it('refuses a second upload to a case that already has a file', async () => {
     const user = await signIn(server)
@@ -368,6 +404,18 @@ describe('POST /cases/:id/file/complete', () => {
     })
   })
 
+  // Middleware order · the key is checked before the case is queried
+  it('refuses a key not signed for the case before looking the case up', async () => {
+    const owner = await signIn(server)
+    const caseId = await createCase(owner)
+    const intruder = await signIn(server)
+
+    const res = await confirmUpload(intruder, caseId, { key: 'invented.pdf' })
+
+    expect(res.status).toBe(400)
+    expect(res.body).toMatchObject({ code: 'FILE_KEY_MISMATCH' })
+  })
+
   // RF-11 · the client said it uploaded; storage says otherwise
   it('refuses a key nothing was uploaded to', async () => {
     const user = await signIn(server)
@@ -454,8 +502,23 @@ describe('POST /cases/:id/file/complete', () => {
     expect(await storage.headObject(expectedFinalKey(first))).toEqual(PDF)
   })
 
-  // RF-11 · RNF-01
+  // RF-11 · RNF-01 · a key shaped for the intruder and this case passes the
+  // key check, so only the guard can refuse it
   it("refuses to confirm on someone else's case", async () => {
+    const owner = await signIn(server)
+    const caseId = await createCase(owner)
+    const intruder = await signIn(server)
+    const key = `pending/${intruder.userId}/${caseId}/${crypto.randomUUID()}-x.pdf`
+
+    const res = await confirmUpload(intruder, caseId, { key })
+
+    expect(res.status).toBe(403)
+    expect(res.body).toMatchObject({ code: 'CASE_FORBIDDEN' })
+  })
+
+  // Middleware order · the owner's own key, sent by someone else: refused by
+  // the key check, before the case is queried
+  it("refuses someone else's key before looking the case up", async () => {
     const owner = await signIn(server)
     const caseId = await createCase(owner)
     const key = await uploadFile(owner, caseId)
@@ -463,8 +526,8 @@ describe('POST /cases/:id/file/complete', () => {
 
     const res = await confirmUpload(intruder, caseId, { key })
 
-    expect(res.status).toBe(403)
-    expect(res.body).toMatchObject({ code: 'CASE_FORBIDDEN' })
+    expect(res.status).toBe(400)
+    expect(res.body).toMatchObject({ code: 'FILE_KEY_MISMATCH' })
   })
 })
 
@@ -528,7 +591,9 @@ describe.each([
   {
     route: 'POST complete',
     send: (user: Signed, id: string) =>
-      confirmUpload(user, id, { key: `pending/${user.userId}/${id}/x.pdf` }),
+      confirmUpload(user, id, {
+        key: `pending/${user.userId}/${id}/${crypto.randomUUID()}-x.pdf`,
+      }),
   },
   { route: 'GET download-url', send: requestDownloadUrl },
 ])('$route', ({ send }) => {
@@ -582,10 +647,10 @@ describe('a case that changes between the check and the write', () => {
   const files = createFilesService(storage)
 
   it('answers 404 and destroys the copy when the case was deleted', async () => {
-    const { caseId, key, stale } = await uploadedAndStale()
+    const { caseId, key, stale, upload } = await uploadedAndStale()
     await markDeleted(caseId)
 
-    await expect(files.completeUpload(stale, key)).rejects.toMatchObject({
+    await expect(files.completeUpload(stale, upload)).rejects.toMatchObject({
       status: 404,
       code: 'CASE_NOT_FOUND',
     })
@@ -593,10 +658,10 @@ describe('a case that changes between the check and the write', () => {
   })
 
   it('answers 409 and destroys the copy when another file was stored', async () => {
-    const { caseId, key, stale } = await uploadedAndStale()
+    const { caseId, key, stale, upload } = await uploadedAndStale()
     await attachFile(caseId, 'users/u/cases/c/other.pdf')
 
-    await expect(files.completeUpload(stale, key)).rejects.toMatchObject({
+    await expect(files.completeUpload(stale, upload)).rejects.toMatchObject({
       status: 409,
       code: 'FILE_ALREADY_ATTACHED',
     })
@@ -605,10 +670,10 @@ describe('a case that changes between the check and the write', () => {
 
   // Two confirmations of the same key in flight: the other one stored it
   it('keeps the file when the same key was stored meanwhile', async () => {
-    const { caseId, key, stale } = await uploadedAndStale()
+    const { caseId, key, stale, upload } = await uploadedAndStale()
     await storeOn(caseId, key)
 
-    await expect(files.completeUpload(stale, key)).resolves.toMatchObject({
+    await expect(files.completeUpload(stale, upload)).resolves.toMatchObject({
       fileKey: expectedFinalKey(key),
     })
     expect(await storage.headObject(expectedFinalKey(key))).toEqual(PDF)
@@ -617,39 +682,43 @@ describe('a case that changes between the check and the write', () => {
   // A double click whose second request arrives after the first moved the
   // object: nothing left in pending/, and the case already holds the key
   it('answers 200 when the object was already moved by the first click', async () => {
-    const { caseId, key, stale } = await uploadedAndStale()
+    const { caseId, key, stale, upload } = await uploadedAndStale()
     await storeOn(caseId, key)
     await storage.deleteObject(key)
 
-    await expect(files.completeUpload(stale, key)).resolves.toMatchObject({
+    await expect(files.completeUpload(stale, upload)).resolves.toMatchObject({
       fileKey: expectedFinalKey(key),
     })
   })
 
   // The same double click, with the object gone between HeadObject and the copy
   it('answers 200 when the object vanishes before the copy', async () => {
-    const { caseId, key, stale } = await uploadedAndStale()
+    const { caseId, key, stale, upload } = await uploadedAndStale()
     await storeOn(caseId, key)
     const copyFails = createFilesService({
       ...storage,
       copyObject: () => Promise.reject(new Error('NoSuchKey')),
     })
 
-    await expect(copyFails.completeUpload(stale, key)).resolves.toMatchObject({
+    await expect(
+      copyFails.completeUpload(stale, upload),
+    ).resolves.toMatchObject({
       fileKey: expectedFinalKey(key),
     })
   })
 
   // Storage failing to destroy must not hide what happened to the case
   it('still answers 404 when destroying the copy fails', async () => {
-    const { caseId, key, stale } = await uploadedAndStale()
+    const { caseId, stale, upload } = await uploadedAndStale()
     await markDeleted(caseId)
     const deleteFails = createFilesService({
       ...storage,
       deleteObject: () => Promise.reject(new Error('R2 unavailable')),
     })
 
-    await expect(deleteFails.completeUpload(stale, key)).rejects.toMatchObject({
+    await expect(
+      deleteFails.completeUpload(stale, upload),
+    ).rejects.toMatchObject({
       status: 404,
       code: 'CASE_NOT_FOUND',
     })
@@ -664,12 +733,12 @@ describe('a write that fails after the copy', () => {
   afterEach(() => vi.restoreAllMocks())
 
   it('destroys the copy when the case does not hold it', async () => {
-    const { key, stale } = await uploadedAndStale()
+    const { key, stale, upload } = await uploadedAndStale()
     vi.spyOn(prisma.case, 'update').mockRejectedValueOnce(
       new Error('connection timeout'),
     )
 
-    await expect(files.completeUpload(stale, key)).rejects.toThrow(
+    await expect(files.completeUpload(stale, upload)).rejects.toThrow(
       'connection timeout',
     )
     expect(await storage.headObject(expectedFinalKey(key))).toBeNull()
@@ -677,13 +746,13 @@ describe('a write that fails after the copy', () => {
 
   // The write landed and only the answer was lost: the copy is the case's file
   it('keeps the copy, and answers with the case, when the write landed', async () => {
-    const { caseId, key, stale } = await uploadedAndStale()
+    const { caseId, key, stale, upload } = await uploadedAndStale()
     vi.spyOn(prisma.case, 'update').mockImplementationOnce((async () => {
       await storeOn(caseId, key)
       throw new Error('connection lost after commit')
     }) as never)
 
-    await expect(files.completeUpload(stale, key)).resolves.toMatchObject({
+    await expect(files.completeUpload(stale, upload)).resolves.toMatchObject({
       fileKey: expectedFinalKey(key),
     })
     expect(await storage.headObject(expectedFinalKey(key))).toEqual(PDF)

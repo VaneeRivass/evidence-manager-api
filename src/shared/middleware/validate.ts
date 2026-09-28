@@ -109,7 +109,7 @@ const parseOrThrow = <S extends z.ZodType>(
 // in section 3: this runs before any query touches the database. Typed with
 // the schema's output: a handler expecting fields the schema does not
 // guarantee does not compile.
-export const validate =
+export const validateBody =
   <S extends z.ZodType>(schema: S) =>
   async (
     req: Request<Record<string, string>, unknown, z.output<S>>,
@@ -128,7 +128,7 @@ export const validate =
     next()
   }
 
-// Like validate, for the query string. Express 5 will not let req.query be
+// Like validateBody, for the query string. Express 5 will not let req.query be
 // replaced, so the result goes to res.locals.query, typed the same way.
 export const validateQuery =
   <S extends z.ZodType>(schema: S) =>

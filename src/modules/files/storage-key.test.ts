@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { buildPendingKey, resolveUploadKey } from './storage-key.js'
+import {
+  buildPendingKey,
+  resolveUploadKey,
+  sanitiseFileName,
+} from './storage-key.js'
 
 const userId = '8f3a1c2e-0000-0000-0000-000000000000'
 const caseId = 'c14b0000-0000-0000-0000-000000000000'
@@ -69,9 +73,24 @@ describe('resolveUploadKey', () => {
     expect(
       resolveUploadKey(`${prefix}Informe Final.pdf`, userId, caseId),
     ).toEqual({
+      pendingKey: `${prefix}Informe Final.pdf`,
       finalKey: `users/${userId}/cases/${caseId}/${uuid}-Informe Final.pdf`,
       fileName: 'Informe Final.pdf',
     })
+  })
+
+  // RF-11 · the key writer and the key reader agree on the layout
+  it('resolves a key buildPendingKey made', () => {
+    const pendingKey = buildPendingKey(userId, caseId, 'Informe Final.pdf')
+    expect(resolveUploadKey(pendingKey, userId, caseId)).toMatchObject({
+      fileName: 'Informe Final.pdf',
+    })
+  })
+
+  // RF-11 · upload-url drops a lone surrogate, so a key carrying one was not
+  // signed by it; storage would fail to encode it
+  it('refuses a name carrying a lone surrogate', () => {
+    expect(resolveUploadKey(`${prefix}a\ud800.pdf`, userId, caseId)).toBeNull()
   })
 
   // RF-11 · signed for another case of the same user
@@ -93,5 +112,12 @@ describe('resolveUploadKey', () => {
     expect(
       resolveUploadKey(`${prefix}report\u0000.pdf`, userId, caseId),
     ).toBeNull()
+  })
+})
+
+describe('sanitiseFileName', () => {
+  // RF-10 · half of a pair is a broken character; a whole pair is an emoji
+  it('drops a lone surrogate and keeps a whole emoji', () => {
+    expect(sanitiseFileName('a\ud800b 📷.png')).toBe('ab 📷.png')
   })
 })

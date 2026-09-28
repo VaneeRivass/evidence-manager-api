@@ -25,7 +25,7 @@ export function createApp(storage: StoragePort): Express {
     res.json({ status: 'ok' })
   })
 
-  // No global express.json(): a route reads its body inside validate(), after
+  // No global express.json(): a route reads its body inside validateBody(), after
   // requireAuth, so an unauthenticated request never pays for parsing it.
   app.use('/auth', authRouter)
   app.use('/cases', createCasesRouter(storage))

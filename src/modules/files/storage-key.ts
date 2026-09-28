@@ -16,8 +16,10 @@ interface UploadKeyParts {
   name: string
 }
 
-// What confirmation needs from a key signed for this case.
+// What confirmation needs from a key signed for this case: where the file
+// is now, where it goes, and what it is called.
 export interface ResolvedUpload {
+  pendingKey: string
   finalKey: string
   fileName: string
 }
@@ -25,8 +27,10 @@ export interface ResolvedUpload {
 // docs/modelo-de-datos.md §5 · without separators a name cannot leave its
 // folder, so `..` is harmless and kept (`report..pdf` is a valid name).
 // Control and format characters go: U+202E can make an .exe read as a .pdf.
+// So does half of a character pair (a lone surrogate): the storage library
+// cannot encode it and would fail with a 500. A whole pair, an emoji, stays.
 export function sanitiseFileName(fileName: string): string {
-  return fileName.replace(/[\p{Cc}\p{Cf}]/gu, '').replace(/[/\\]/g, '')
+  return fileName.replace(/[\p{Cc}\p{Cf}\p{Cs}]/gu, '').replace(/[/\\]/g, '')
 }
 
 // RF-10 · bytes, not characters: `é` takes two.
@@ -76,6 +80,7 @@ export function resolveUploadKey(
   if (!signedForThisCase) return null
 
   return {
+    pendingKey,
     // Out of pending/, so the 24-hour rule never reaches it.
     finalKey: `users/${userId}/cases/${caseId}/${parts.uuid}-${name}`,
     fileName: name,

@@ -1,6 +1,6 @@
 import { type Case, Prisma } from '../../generated/prisma/client.js'
 import { isMissingRow, prisma } from '../../shared/database/prisma.js'
-import { caseNotFound } from '../../shared/middleware/require-owned-case.js'
+import { caseNotFound } from '../../shared/errors/app-error.js'
 import type { StoragePort } from '../files/storage.port.js'
 import type {
   CreateCaseInput,

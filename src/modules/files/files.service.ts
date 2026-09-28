@@ -2,18 +2,14 @@ import type { Case } from '../../generated/prisma/client.js'
 import { env } from '../../shared/config/env.js'
 import {
   BadRequest,
+  caseNotFound,
   Conflict,
   NotFound,
 } from '../../shared/errors/app-error.js'
 import { ErrorCode } from '../../shared/errors/error-codes.js'
-import { caseNotFound } from '../../shared/middleware/require-owned-case.js'
 import { isMissingRow, prisma } from '../../shared/database/prisma.js'
 import { logger } from '../../shared/logging/logger.js'
-import {
-  buildPendingKey,
-  type ResolvedUpload,
-  resolveUploadKey,
-} from './storage-key.js'
+import { buildPendingKey, type ResolvedUpload } from './storage-key.js'
 import type { RequestUploadInput } from './files.schema.js'
 import type { ObjectMetadata, StoragePort } from './storage.port.js'
 
@@ -28,6 +24,9 @@ interface DownloadUrl {
   expiresIn: number
 }
 
+// The type and declared size (checkDeclaredFile) and the key's shape
+// (checkUploadKey) are checked before the case is queried; what reaches here
+// already passed them.
 export interface FilesService {
   // RF-10
   requestUploadUrl(
@@ -35,17 +34,28 @@ export interface FilesService {
     input: RequestUploadInput,
   ): Promise<UploadUrl>
   // RF-11
-  completeUpload(ownedCase: Case, pendingKey: string): Promise<Case>
+  completeUpload(ownedCase: Case, upload: ResolvedUpload): Promise<Case>
   // RF-12
   requestDownloadUrl(ownedCase: Case): Promise<DownloadUrl>
 }
 
 // RF-10 · MIME types ignore case.
-const isAllowedContentType = (contentType: string): boolean =>
+export const isAllowedContentType = (contentType: string): boolean =>
   env.ALLOWED_MIME_TYPES.includes(contentType.toLowerCase())
 
 const alreadyAttached = (caseId: string) =>
   Conflict(ErrorCode.FILE_ALREADY_ATTACHED, `Case ${caseId} already has a file`)
+
+// RF-11 · the case, live and already holding this file — or null. A double
+// click may have stored the file while this request was on its way: every
+// path that fails after the guard asks this before answering.
+const findCaseHolding = (
+  caseId: string,
+  finalKey: string,
+): Promise<Case | null> =>
+  prisma.case.findFirst({
+    where: { id: caseId, deletedAt: null, fileKey: finalKey },
+  })
 
 // ADR-0006 · the storage is handed in, never imported.
 export function createFilesService(storage: StoragePort): FilesService {
@@ -60,21 +70,6 @@ export function createFilesService(storage: StoragePort): FilesService {
         }),
       ),
     )
-  }
-
-  // RF-11 · a double click may have stored this file while this request was
-  // on its way: if the case already holds it, that is success; if not, the
-  // failure stands.
-  async function returnIfAlreadyStored(
-    caseId: string,
-    finalKey: string,
-    failure: unknown,
-  ): Promise<Case> {
-    const storedCase = await prisma.case.findFirst({
-      where: { id: caseId, deletedAt: null, fileKey: finalKey },
-    })
-    if (storedCase) return storedCase
-    throw failure
   }
 
   // RF-11 · the signature fixed the type but not the size, so both are
@@ -102,8 +97,7 @@ export function createFilesService(storage: StoragePort): FilesService {
   // it may have changed since.
   async function saveFileReference(
     caseId: string,
-    pendingKey: string,
-    { finalKey, fileName }: ResolvedUpload,
+    { pendingKey, finalKey, fileName }: ResolvedUpload,
     { size, contentType }: ObjectMetadata,
   ): Promise<Case> {
     try {
@@ -134,58 +128,45 @@ export function createFilesService(storage: StoragePort): FilesService {
     pendingKey: string,
     finalKey: string,
   ): Promise<Case> {
+    const storedCase = await findCaseHolding(caseId, finalKey)
+    if (storedCase) return storedCase
+
+    await deleteFromStorage(finalKey, pendingKey)
     const latestCase = await prisma.case.findFirst({
       where: { id: caseId, deletedAt: null },
     })
-    if (latestCase?.fileKey === finalKey) return latestCase
-
-    await deleteFromStorage(finalKey, pendingKey)
     if (!latestCase) throw caseNotFound()
     throw alreadyAttached(caseId)
   }
 
   // RF-11 · the write failed for another reason (a timeout), and may have
-  // landed before the answer was lost. If the case cannot even be read, the
-  // copy stays: deleting a file the case holds would be worse than leaving an
-  // orphan. Read and not holding it, the copy would be an orphan outside
-  // pending/, so it goes.
+  // landed before the answer was lost. Holding the file, the case is the
+  // answer. Not holding it, the copy would be an orphan outside pending/, so
+  // it goes. If the case cannot even be read, the copy stays: deleting a file
+  // the case holds would be worse than leaving an orphan.
   async function recoverIfWriteFailed(
     caseId: string,
     finalKey: string,
     failure: unknown,
   ): Promise<Case> {
+    let storedCase: Case | null
     try {
-      return await returnIfAlreadyStored(caseId, finalKey, failure)
-    } catch (error) {
-      if (error === failure) {
-        await deleteFromStorage(finalKey)
-      } else {
-        logger.warn({ err: error, key: finalKey }, 'Copy kept: case unreadable')
-      }
+      storedCase = await findCaseHolding(caseId, finalKey)
+    } catch (readError) {
+      logger.warn(
+        { err: readError, key: finalKey },
+        'Copy kept: case unreadable',
+      )
       throw failure
     }
+
+    if (storedCase) return storedCase
+    await deleteFromStorage(finalKey)
+    throw failure
   }
 
   return {
-    async requestUploadUrl(ownedCase, input) {
-      const { fileName, contentType, size: declaredSize } = input
-
-      if (!isAllowedContentType(contentType)) {
-        throw BadRequest(
-          ErrorCode.FILE_TYPE_NOT_ALLOWED,
-          `Type ${contentType} is not in the allowlist`,
-          { allowed: env.ALLOWED_MIME_TYPES.join(', ') },
-        )
-      }
-
-      if (declaredSize > env.MAX_FILE_SIZE_BYTES) {
-        throw BadRequest(
-          ErrorCode.FILE_TOO_LARGE,
-          `Declared size ${declaredSize} is over the limit`,
-          { max: env.MAX_FILE_SIZE_BYTES },
-        )
-      }
-
+    async requestUploadUrl(ownedCase, { fileName, contentType }) {
       // RF-10 · evidence is attached once and never replaced.
       if (ownedCase.fileKey !== null) throw alreadyAttached(ownedCase.id)
 
@@ -203,19 +184,8 @@ export function createFilesService(storage: StoragePort): FilesService {
     },
 
     // RF-11 · in the order of the flow in docs/requirements.md.
-    async completeUpload(ownedCase, pendingKey) {
-      const upload = resolveUploadKey(
-        pendingKey,
-        ownedCase.userId,
-        ownedCase.id,
-      )
-      if (!upload) {
-        throw BadRequest(
-          ErrorCode.FILE_KEY_MISMATCH,
-          `Key ${pendingKey} was not signed for case ${ownedCase.id}`,
-        )
-      }
-      const { finalKey } = upload
+    async completeUpload(ownedCase, upload) {
+      const { pendingKey, finalKey } = upload
 
       // A double click: the first confirmation already stored this very file,
       // and moved it out of pending/, so storage is not asked.
@@ -229,11 +199,12 @@ export function createFilesService(storage: StoragePort): FilesService {
 
       const uploaded = await storage.headObject(pendingKey)
       if (!uploaded) {
-        const notUploaded = BadRequest(
+        const storedCase = await findCaseHolding(ownedCase.id, finalKey)
+        if (storedCase) return storedCase
+        throw BadRequest(
           ErrorCode.FILE_NOT_UPLOADED,
           `No object at ${pendingKey}`,
         )
-        return returnIfAlreadyStored(ownedCase.id, finalKey, notUploaded)
       }
       await rejectUnlessSizeAndTypeAllowed(pendingKey, uploaded)
 
@@ -241,15 +212,12 @@ export function createFilesService(storage: StoragePort): FilesService {
       try {
         await storage.copyObject({ from: pendingKey, to: finalKey })
       } catch (error) {
-        return returnIfAlreadyStored(ownedCase.id, finalKey, error)
+        const storedCase = await findCaseHolding(ownedCase.id, finalKey)
+        if (storedCase) return storedCase
+        throw error
       }
 
-      const storedCase = await saveFileReference(
-        ownedCase.id,
-        pendingKey,
-        upload,
-        uploaded,
-      )
+      const storedCase = await saveFileReference(ownedCase.id, upload, uploaded)
       // Left behind, the 24-hour rule removes it: not worth failing a
       // confirmation that is already stored.
       await deleteFromStorage(pendingKey)
