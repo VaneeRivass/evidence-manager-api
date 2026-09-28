@@ -99,6 +99,10 @@ import { r2Storage } from './r2-storage.adapter.js'
 export function createFilesService(storage: StoragePort) { … }
 ```
 
+A service that also needs the database imports `prisma` and receives the storage —
+`deleteCase(item, storage)`. It is the same rule applied to two dependencies: import what
+runs locally, receive what does not.
+
 **Middleware order: cheap before expensive.**
 
 ```ts

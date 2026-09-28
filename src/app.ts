@@ -5,7 +5,7 @@ import { env } from './shared/config/env.js'
 import { errorHandler, notFoundHandler } from './shared/errors/error-handler.js'
 import { httpLogger } from './shared/logging/logger.js'
 import { authRouter } from './modules/auth/auth.routes.js'
-import { casesRouter } from './modules/cases/cases.routes.js'
+import { createCasesRouter } from './modules/cases/cases.routes.js'
 import { createFilesRouter } from './modules/files/files.routes.js'
 import { createR2Storage } from './modules/files/r2-storage.adapter.js'
 import type { StoragePort } from './modules/files/storage.port.js'
@@ -28,7 +28,7 @@ export function createApp(storage: StoragePort): Express {
   // No global express.json(): a route reads its body inside validate(), after
   // requireAuth, so an unauthenticated request never pays for parsing it.
   app.use('/auth', authRouter)
-  app.use('/cases', casesRouter)
+  app.use('/cases', createCasesRouter(storage))
   app.use('/cases', createFilesRouter(storage))
 
   // Last, in this order: no route matched, then whatever was thrown.

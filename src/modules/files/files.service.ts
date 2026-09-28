@@ -6,6 +6,7 @@ import {
   NotFound,
 } from '../../shared/errors/app-error.js'
 import { ErrorCode } from '../../shared/errors/error-codes.js'
+import { caseNotFound } from '../../shared/middleware/load-owned-case.js'
 import { isMissingRow, prisma } from '../../shared/database/prisma.js'
 import { logger } from '../../shared/logging/logger.js'
 import {
@@ -136,7 +137,7 @@ export function createFilesService(storage: StoragePort): FilesService {
     if (current?.fileKey === fileKey) return current
 
     await destroy(fileKey, key)
-    if (!current) throw NotFound(ErrorCode.CASE_NOT_FOUND, 'Case not found')
+    if (!current) throw caseNotFound()
     throw alreadyAttached(caseId)
   }
 

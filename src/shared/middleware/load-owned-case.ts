@@ -2,11 +2,16 @@ import type { NextFunction, Request, Response } from 'express'
 import type { Case } from '../../generated/prisma/client.js'
 import { sessionOf } from '../../modules/auth/require-auth.js'
 import { prisma } from '../database/prisma.js'
-import { Forbidden, NotFound } from '../errors/app-error.js'
+import { type AppError, Forbidden, NotFound } from '../errors/app-error.js'
 import { ErrorCode } from '../errors/error-codes.js'
 
 // What the guard leaves for the handler after it: the case, found and checked.
 export type OwnedCaseResponse = Response<unknown, { case: Case }>
+
+// RF-07 · RF-09b · one spelling of the 404, for the guard and for every write
+// that finds the case gone after the guard read it.
+export const caseNotFound = (): AppError =>
+  NotFound(ErrorCode.CASE_NOT_FOUND, 'Case not found')
 
 // RF-07 · RF-09b · the one place a /cases/:id route finds its case, so the
 // check cannot be forgotten in one of them. Missing or deleted is a 404;
@@ -20,7 +25,7 @@ export async function loadOwnedCase(
     where: { id: req.params.id, deletedAt: null },
   })
 
-  if (!item) throw NotFound(ErrorCode.CASE_NOT_FOUND, 'Case not found')
+  if (!item) throw caseNotFound()
 
   if (item.userId !== sessionOf(req).id) {
     throw Forbidden(ErrorCode.CASE_FORBIDDEN, 'Case of another user')

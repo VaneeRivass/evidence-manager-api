@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express'
 import type { OwnedCaseResponse } from '../../shared/middleware/load-owned-case.js'
 import { sessionOf } from '../auth/require-auth.js'
+import type { StoragePort } from '../files/storage.port.js'
 import { toPublicCase } from './cases.mapper.js'
 import {
   createCase,
@@ -47,11 +48,11 @@ export async function update(
   res.status(200).json(toPublicCase(item))
 }
 
-// RF-09
-export async function remove(
-  _req: Request,
-  res: OwnedCaseResponse,
-): Promise<void> {
-  await deleteCase(res.locals.case.id)
-  res.status(204).end()
-}
+// RF-09 · the only cases handler that needs the storage, so the only one
+// built by a factory, the way the files handlers are.
+export const remove =
+  (storage: StoragePort) =>
+  async (_req: Request, res: OwnedCaseResponse): Promise<void> => {
+    await deleteCase(res.locals.case, storage)
+    res.status(204).end()
+  }
