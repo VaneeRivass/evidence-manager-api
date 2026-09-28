@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildPendingKey } from './build-object-key.js'
+import { buildPendingKey, isPendingKeyOf } from './storage-key.js'
 
 const userId = '8f3a1c2e-0000-0000-0000-000000000000'
 const caseId = 'c14b0000-0000-0000-0000-000000000000'
@@ -56,5 +56,32 @@ describe('buildPendingKey', () => {
     const first = buildPendingKey(userId, caseId, 'report.pdf')
     const second = buildPendingKey(userId, caseId, 'report.pdf')
     expect(first).not.toBe(second)
+  })
+})
+
+describe('isPendingKeyOf', () => {
+  const uuid = '7d2e9f01-4a6b-4c3d-8e9f-0a1b2c3d4e5f'
+  const prefix = `pending/${userId}/${caseId}/${uuid}-`
+
+  // RF-11 · the key upload-url signs is always accepted
+  it('accepts a key buildPendingKey made', () => {
+    const key = buildPendingKey(userId, caseId, 'Informe Final.pdf')
+    expect(isPendingKeyOf(key, userId, caseId)).toBe(true)
+  })
+
+  // RF-11 · upload-url never signs a name over 255 bytes; storage would
+  // answer an error the API cannot name
+  it('refuses a name over 255 bytes', () => {
+    expect(isPendingKeyOf(`${prefix}${'a'.repeat(256)}`, userId, caseId)).toBe(
+      false,
+    )
+  })
+
+  // RF-11 · upload-url strips control characters, so a key carrying one was
+  // not signed by it
+  it('refuses a name carrying a control character', () => {
+    expect(isPendingKeyOf(`${prefix}report\u0000.pdf`, userId, caseId)).toBe(
+      false,
+    )
   })
 })

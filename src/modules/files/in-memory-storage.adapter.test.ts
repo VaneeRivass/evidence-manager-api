@@ -85,13 +85,15 @@ describe('createInMemoryStorage', () => {
   })
 
   // RF-12 · a link the caller uses to GET the file directly from storage
-  it('createDownloadUrl returns a url naming the key', async () => {
+  it('createDownloadUrl returns a url naming the key and the file', async () => {
     const storage = createInMemoryStorage()
     const { url, expiresIn } = await storage.createDownloadUrl({
       key: 'users/u1/x.pdf',
+      fileName: 'x.pdf',
     })
 
     expect(url).toContain('users/u1/x.pdf')
+    expect(url).toContain('fileName=x.pdf')
     expect(expiresIn).toBe(60)
   })
 })

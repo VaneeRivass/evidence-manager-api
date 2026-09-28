@@ -66,10 +66,10 @@ link.
 
 | ID | Requirement |
 |---|---|
-| **RF-10** | Request an upload link with file name, type and size, returning `{ uploadUrl, key, expiresIn }`. A type outside the allowlist returns `400`. A declared size above the limit returns `400`. A file name longer than **255 bytes** returns `400` — the name limit of common file systems, so any real file fits, while the storage key stays far below its 1024-byte maximum. Another user's case returns `403`. **The allowlist and the size limit are configurable per environment**, not constants in code. The signed key points at a **temporary area** (`pending/`), not at its final location. |
-| **RF-11** | Confirming the upload persists the file reference **only after verifying against storage** that: the object exists, its real size is within the limit, its real type matches what was signed, and its key belongs to that case and user. If the object is missing, `400`. If size or type do not match, **the object is destroyed** and `400` is returned. |
+| **RF-10** | Request an upload link with file name, type and size, returning `{ uploadUrl, key, expiresIn }`. The type is compared with the allowlist in lowercase — MIME types ignore case — but **signed exactly as sent**, so the client's `PUT` repeats the header it already has; a signature over a value the client never saw would fail with `403` in storage. A type outside the allowlist returns `400` with `FILE_TYPE_NOT_ALLOWED` and `{ allowed }`, the allowlist as one comma-separated string. The declared size is in bytes, a whole number from 1 — an empty file is no evidence — and anything else is a field error on `size`. A declared size above the limit returns `400` with `FILE_TOO_LARGE` and `{ max }` in bytes. Both are rules of the environment, not of the request's shape, so they are top-level codes rather than field errors — the client cannot know the limits in advance and reads them from `params`. A file name longer than **255 bytes** returns `400` — the name limit of common file systems, so any real file fits, while the storage key stays far below its 1024-byte maximum. Another user's case returns `403`. **The allowlist and the size limit are configurable per environment**, not constants in code. The signed key points at a **temporary area** (`pending/`), not at its final location. **A case that already carries a file returns `409` with `FILE_ALREADY_ATTACHED`**: evidence is attached once and never replaced — see *Evidence is never replaced* under Known limitations. |
+| **RF-11** | Confirming the upload persists the file reference **only after verifying against storage**, and without storing anything when the link was signed: the key itself says which user and case it was signed for, since only the API can sign a write to `pending/`. **The key must have exactly the shape `pending/{userId}/{caseId}/{uuid}-{name}`** — the session's user, the case in the URL, one segment after it, and a name exactly as `upload-url` leaves it: sanitised and within 255 bytes — or `400` with `FILE_KEY_MISMATCH`. The shape is checked, not a prefix: `pending/{userId}/{caseId}/../../other/…` starts right but could reach another folder once a client normalises the path. One code covers an invented key, one from another of the user's cases and one from someone else's: the API compares text and cannot tell them apart without querying, so it claims nothing about who owns the key. The `403` stays with the case in the URL. If the object is missing, `400` with `FILE_NOT_UPLOADED`. If its **real size is 0 or over the limit, or its real type is not in the allowlist** (compared in lowercase, and stored in lowercase), **the object is destroyed** and `400` is returned with `FILE_REJECTED`. The reference stored is the final key, the real size and type, and the file name read from the key — what follows `{uuid}-`, already sanitised and within 255 bytes since the link was requested. The real type is not compared with the signed one, which the API does not keep: storage already refused any `PUT` with another type. Confirming the key the case already holds — a double click — returns `200` with the case as it is and destroys nothing; it is checked before asking storage, since the first confirmation already moved the object out of `pending/`. If, before the reference is written, the case was deleted or another confirmation stored a different file, the copy is destroyed and `404` or `409` with `FILE_ALREADY_ATTACHED` is returned: the write only lands on a case still undeleted and without a file; the two objects are destroyed independently and a failure there is logged, never turning the `404` or `409` into a `500`. A double click whose second request finds the object already moved by the first — missing, or gone before the copy — returns `200` too: the case is read again before answering. If the write fails for any other reason (the database timed out), the case is read again: if it holds the new key the copy is kept and the case returned, otherwise it is destroyed, since outside `pending/` nothing else would remove it. |
 | **RF-11b** | Once verified, the object is moved from the temporary area to its final location. **An upload that is never confirmed stays in the temporary area and storage destroys it after 24 hours**, through a bucket lifecycle rule — no scheduled process, which a serverless deployment could not host anyway. |
-| **RF-12** | Request a download link, returning a signed URL valid for 60 seconds. A case with no file returns `404`. |
+| **RF-12** | Request a download link, returning `{ downloadUrl, expiresIn }`, a signed URL valid for 60 seconds. A case with no file returns `404` with `FILE_NOT_FOUND`. The link is signed to be **saved, never opened**, under the file's name rather than its key: `Content-Disposition: attachment; filename="…"; filename*=UTF-8''…` (RFC 6266) — the plain form for old clients, ASCII only and without `"`, `\` or `%` (some decode it), and the encoded one so `Evidencia año 2026.pdf` keeps its `ñ`. Being signed, neither can be changed by whoever holds the link. |
 
 ### 1.4 Response contract
 
@@ -177,8 +177,8 @@ cover.**
 | `GET` | `/cases/:id` | ✓ | ✓ | — | `200` | `400` `401` `403` `404` | RF-07 |
 | `PATCH` | `/cases/:id` | ✓ | ✓ | title, description, status | `200` | `400` `401` `403` `404` | RF-08 |
 | `DELETE` | `/cases/:id` | ✓ | ✓ | — | `204` | `400` `401` `403` `404` `500` | RF-09 |
-| `POST` | `/cases/:id/file/upload-url` | ✓ | ✓ | fileName, contentType, size | `200` | `400` `401` `403` `404` | RF-10 |
-| `POST` | `/cases/:id/file/complete` | ✓ | ✓ | key | `200` | `400` `401` `403` `404` | RF-11 |
+| `POST` | `/cases/:id/file/upload-url` | ✓ | ✓ | fileName, contentType, size | `200` | `400` `401` `403` `404` `409` | RF-10 |
+| `POST` | `/cases/:id/file/complete` | ✓ | ✓ | key | `200` | `400` `401` `403` `404` `409` | RF-11 |
 | `GET` | `/cases/:id/file/download-url` | ✓ | ✓ | — | `200` | `400` `401` `403` `404` | RF-12 |
 | `GET` | `/health` | — | — | — | `200` | — | — |
 | `GET` | `/openapi.json` | — | — | — | `200` | — | — |
@@ -290,7 +290,7 @@ sequenceDiagram
 
     Note over B,S: 1 · Ask permission to upload
     B->>A: POST /cases/:id/file/upload-url<br/>{ fileName, contentType, size }
-    A->>A: valid session? case owned?<br/>type allowed? size within limit?
+    A->>A: valid session? case owned?<br/>type allowed? size within limit?<br/>case without a file yet? (else 409)
     A->>A: build key with a uuid, under pending/
     A->>S: sign PUT (valid 300 s)
     A-->>B: { uploadUrl, key, expiresIn }
@@ -301,19 +301,24 @@ sequenceDiagram
 
     Note over B,S: 3 · Confirm, with real verification
     B->>A: POST /cases/:id/file/complete { key }
-    A->>A: does the key belong to THIS case and user?
+    A->>A: key shaped pending/{user}/{THIS case}/{uuid}-{name}?<br/>(else 400 FILE_KEY_MISMATCH)
+    A->>A: does the case already hold this key? (a double click)<br/>→ 200 { case }, nothing destroyed, storage not asked
     A->>S: HeadObject(key)
     alt object missing
         S-->>A: 404
         A-->>B: 400 FILE_NOT_UPLOADED
-    else real size or type do not match
+    else real size over the limit, or real type not allowed
         S-->>A: ContentLength / ContentType
         A->>S: DeleteObject(key)
         A-->>B: 400 FILE_REJECTED
+    else deleted, or another file stored, before the write
+        A->>S: DeleteObject(copy)
+        A-->>B: 404 / 409 FILE_ALREADY_ATTACHED
     else everything checks out
         S-->>A: ContentLength / ContentType
         A->>S: CopyObject pending/ → users/
-        A->>D: UPDATE case SET fileKey, fileSize, fileType
+        A->>D: UPDATE case SET fileKey, fileName, fileSize, fileType<br/>WHERE not deleted AND no file yet
+        A->>S: DeleteObject(pending key)<br/>(if it fails, the 24 h rule removes it)
         A-->>B: 200 { case }
     end
 
@@ -355,6 +360,17 @@ reference and singular endpoints.
 file, all pointing at the same case — a one-to-many relation. Endpoints would identify
 which one. The real cost sits in the interface: a file list, with delete and download per
 row.
+
+### Evidence is never replaced
+
+Once a case carries a file, asking for another upload answers `409`. Replacing it would
+destroy the previous proof and leave no sign that it existed — the opposite of what an
+evidence record is for. Uploading is a `POST`, which adds; changing a case is `PATCH`, and
+it does not reach the file. A wrong attachment is corrected by deleting the case, which
+leaves its trail, and creating a new one.
+
+**How it would be resolved.** Keep every version: the one-to-many table above, where a new
+upload adds a row instead of overwriting one, so the history of the evidence survives.
 
 ### Two states
 
@@ -426,6 +442,30 @@ active instances.
 **How it would be resolved.** A shared counter store. It is the same constraint that makes
 a circuit breaker unworkable here: both patterns need state between requests, and the
 serverless model does not guarantee it.
+
+### The file routes have no rate limit
+
+Only the authentication routes are limited. A signed-in user can ask for upload links in a
+loop and upload to each one, and every upload is a paid storage operation. The damage is
+bounded: an object never confirmed is destroyed after 24 hours, and each weighs at most
+the size limit. A lock per case — no new link while one awaits confirmation — was
+considered and dropped: it does not stop someone who opens a thousand cases, and it blocks
+the honest user who closed the tab mid-upload until the link expires.
+
+**How it would be resolved.** A per-user limit on the file routes, which inherits the
+limitation above.
+
+### The upload link is not tied to one file
+
+A link accepts any bytes of the signed type until it expires, and each `PUT` overwrites the
+previous one. Confirmation checks whatever is there at that moment: its size and type, not
+that it is the file the user picked.
+
+**How it would be resolved — not yet verified on R2.** The browser computes the file's
+SHA-256 and sends it when asking for the link; the API signs it into the `PUT`, and storage
+rejects any other bytes. S3 supports this; R2's documentation does not say whether it
+does. It would replace the adapter's current rule of signing no checksum at all, which
+exists because the API never holds the file to compute one.
 
 ### The token cannot be revoked
 

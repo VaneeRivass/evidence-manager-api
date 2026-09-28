@@ -27,6 +27,20 @@ export function copySource(bucket: string, key: string): string {
   return `${bucket}/${key.split('/').map(encodeURIComponent).join('/')}`
 }
 
+// RF-12 · RFC 6266. The plain form is for old clients: ASCII only, no quote
+// or backslash to break out of it, and no % a client might decode. The u flag
+// counts an emoji as one character, not two. The encoded form (RFC 8187) carries
+// the real name, accents included; encodeURIComponent leaves ' ( ) * as they
+// are, and RFC 8187 wants them encoded too.
+function attachmentNamed(fileName: string): string {
+  const plain = fileName.replace(/[^\x20-\x7e]|["\\%]/gu, '_')
+  const encoded = encodeURIComponent(fileName).replace(
+    /['()*]/g,
+    (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`,
+  )
+  return `attachment; filename="${plain}"; filename*=UTF-8''${encoded}`
+}
+
 // ADR-0006 · Signing is tested offline; head, copy and delete reach R2 and
 // would need live credentials in CI, so they are checked by hand.
 export function createR2Storage(config: {
@@ -67,13 +81,13 @@ export function createR2Storage(config: {
       return { url, expiresIn: UPLOAD_URL_TTL_SECONDS }
     },
 
-    async createDownloadUrl({ key }) {
+    async createDownloadUrl({ key, fileName }) {
       const command = new GetObjectCommand({
         Bucket: bucket,
         Key: key,
         // ADR-0004 · an executable renamed to .pdf passes every check, so the
         // file is always saved, never opened in the browser.
-        ResponseContentDisposition: 'attachment',
+        ResponseContentDisposition: attachmentNamed(fileName),
       })
       const url = await getSignedUrl(client, command, {
         expiresIn: DOWNLOAD_URL_TTL_SECONDS,

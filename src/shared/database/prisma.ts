@@ -1,5 +1,5 @@
 import { PrismaPg } from '@prisma/adapter-pg'
-import { PrismaClient } from '../../generated/prisma/client.js'
+import { Prisma, PrismaClient } from '../../generated/prisma/client.js'
 import { env } from '../config/env.js'
 
 // Pooled string: every runtime query goes through Neon's pooler. See docs/adr/0002.
@@ -13,3 +13,8 @@ const adapter = new PrismaPg({
 })
 
 export const prisma = new PrismaClient({ adapter })
+
+// P2025: an update's filter matched no row — the row changed since it was read.
+export const isMissingRow = (error: unknown): boolean =>
+  error instanceof Prisma.PrismaClientKnownRequestError &&
+  error.code === 'P2025'
