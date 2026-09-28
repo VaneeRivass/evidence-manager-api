@@ -1,7 +1,3 @@
-import {
-  DOWNLOAD_URL_TTL_SECONDS,
-  UPLOAD_URL_TTL_SECONDS,
-} from './files.constants.js'
 import type { ObjectMetadata, StoragePort } from './storage.port.js'
 
 export interface InMemoryStorage extends StoragePort {
@@ -19,16 +15,16 @@ export function createInMemoryStorage(): InMemoryStorage {
       objects.set(key, metadata)
     },
 
-    signUploadUrl: ({ key, contentType }) =>
+    signUploadUrl: ({ key, contentType, expiresIn }) =>
       Promise.resolve({
         url: `memory://upload/${key}?contentType=${contentType}`,
-        expiresIn: UPLOAD_URL_TTL_SECONDS,
+        expiresIn,
       }),
 
-    signDownloadUrl: ({ key, fileName }) =>
+    signDownloadUrl: ({ key, fileName, expiresIn }) =>
       Promise.resolve({
         url: `memory://download/${key}?fileName=${fileName}`,
-        expiresIn: DOWNLOAD_URL_TTL_SECONDS,
+        expiresIn,
       }),
 
     headObject: (key) => Promise.resolve(objects.get(key) ?? null),

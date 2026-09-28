@@ -1,7 +1,7 @@
 import type { Request, Response } from 'express'
-import type { OwnedCaseResponse } from '../../shared/middleware/require-owned-case.js'
-import { sessionOf } from '../auth/require-auth.js'
-import type { StoragePort } from '../files/storage.port.js'
+import type { OwnedCaseResponse } from './require-owned-case.middleware.js'
+import { sessionOf } from '../auth/require-auth.middleware.js'
+import type { StoragePort } from '../../shared/storage/storage.port.js'
 import { toPublicCase } from './cases.mapper.js'
 import {
   createCase,

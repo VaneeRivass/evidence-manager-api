@@ -4,9 +4,12 @@ import { afterAll, beforeEach, describe, expect, it } from 'vitest'
 import * as z from 'zod'
 import { ValidationError } from '../errors/app-error.js'
 import { FieldCode } from '../errors/error-codes.js'
-import { errorHandler, notFoundHandler } from '../errors/error-handler.js'
+import {
+  errorHandler,
+  notFoundHandler,
+} from '../errors/error-handler.middleware.js'
 import { createLoggers } from './logger.js'
-import { validateBody } from '../middleware/validate.js'
+import { validateBody } from '../middleware/validate.middleware.js'
 import { listen } from '../../../tests/helpers.js'
 
 // The app's own loggers, writing to an array instead of stdout, and at info:

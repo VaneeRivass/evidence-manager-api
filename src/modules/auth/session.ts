@@ -45,7 +45,7 @@ export const signSessionToken = ({ id, email }: Session): Promise<string> => {
     .sign(sessionKey)
 }
 
-// `reason` never reaches the client: error-handler.ts sends `code` and
+// `reason` never reaches the client: error-handler.middleware.ts sends `code` and
 // `params`, never `message`. It only makes the server log say why —
 // expired, forged, wrong algorithm — instead of the same line every time.
 export const noSession = (reason?: string): AppError =>

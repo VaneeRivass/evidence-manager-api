@@ -2,9 +2,13 @@ import express from 'express'
 import request from 'supertest'
 import { afterAll, describe, expect, it } from 'vitest'
 import * as z from 'zod'
-import { errorHandler } from '../errors/error-handler.js'
+import { errorHandler } from '../errors/error-handler.middleware.js'
 import { listen } from '../../../tests/helpers.js'
-import { validateBody, validateParams, validateQuery } from './validate.js'
+import {
+  validateBody,
+  validateParams,
+  validateQuery,
+} from './validate.middleware.js'
 
 const schema = z.object({
   title: z.string().min(3),

@@ -4,7 +4,6 @@ import { Conflict, Unauthorized } from '../../shared/errors/app-error.js'
 import { ErrorCode } from '../../shared/errors/error-codes.js'
 import { Prisma, type User } from '../../generated/prisma/client.js'
 import { prisma } from '../../shared/database/prisma.js'
-import type { Session } from './session.js'
 import type { LoginInput, RegisterInput } from './auth.schema.js'
 
 // `email` is the User model's only unique column besides `id`, which is
@@ -71,9 +70,3 @@ export async function loginUser({
 
   return user
 }
-
-// RNF-01 / RF-01 · the explicit mapper: passwordHash never leaves this file.
-export const toPublicUser = (user: User): Session => ({
-  id: user.id,
-  email: user.email,
-})

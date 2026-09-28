@@ -1,20 +1,20 @@
 import { Router } from 'express'
-import { requireAuth } from '../auth/require-auth.js'
+import { requireAuth } from '../auth/require-auth.middleware.js'
 import { caseParams } from '../cases/cases.schema.js'
-import { requireOwnedCase } from '../../shared/middleware/require-owned-case.js'
+import { requireOwnedCase } from '../cases/require-owned-case.middleware.js'
 import {
   validateBody,
   validateParams,
-} from '../../shared/middleware/validate.js'
+} from '../../shared/middleware/validate.middleware.js'
 import {
   completeUpload,
   requestDownloadUrl,
   requestUploadUrl,
 } from './files.controller.js'
-import { checkDeclaredFile, checkUploadKey } from './files.middleware.js'
+import { checkDeclaredFile, checkUploadKey } from './check-upload.middleware.js'
 import { completeUploadSchema, requestUploadSchema } from './files.schema.js'
 import { createFilesService } from './files.service.js'
-import type { StoragePort } from './storage.port.js'
+import type { StoragePort } from '../../shared/storage/storage.port.js'
 
 // Mounted under /cases, beside the cases routes: every route here belongs to one
 // case and passes the same ownership guard. Cheap before expensive: what

@@ -8,10 +8,6 @@ import {
   S3ServiceException,
 } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
-import {
-  DOWNLOAD_URL_TTL_SECONDS,
-  UPLOAD_URL_TTL_SECONDS,
-} from './files.constants.js'
 import type { StoragePort } from './storage.port.js'
 
 export function isNotFound(error: unknown): boolean {
@@ -65,23 +61,23 @@ export function createR2Storage(config: {
   })
 
   return {
-    async signUploadUrl({ key, contentType }) {
+    async signUploadUrl({ key, contentType, expiresIn }) {
       const command = new PutObjectCommand({
         Bucket: bucket,
         Key: key,
         ContentType: contentType,
       })
       const url = await getSignedUrl(client, command, {
-        expiresIn: UPLOAD_URL_TTL_SECONDS,
+        expiresIn,
         // Without this only `host` is signed, and a PUT could send any type.
         // Lowercase on purpose: the signer compares lowercase header names,
         // so 'Content-Type' would be silently left out of the signature.
         signableHeaders: new Set(['content-type']),
       })
-      return { url, expiresIn: UPLOAD_URL_TTL_SECONDS }
+      return { url, expiresIn }
     },
 
-    async signDownloadUrl({ key, fileName }) {
+    async signDownloadUrl({ key, fileName, expiresIn }) {
       const command = new GetObjectCommand({
         Bucket: bucket,
         Key: key,
@@ -90,9 +86,9 @@ export function createR2Storage(config: {
         ResponseContentDisposition: attachmentNamed(fileName),
       })
       const url = await getSignedUrl(client, command, {
-        expiresIn: DOWNLOAD_URL_TTL_SECONDS,
+        expiresIn,
       })
-      return { url, expiresIn: DOWNLOAD_URL_TTL_SECONDS }
+      return { url, expiresIn }
     },
 
     async headObject(key) {

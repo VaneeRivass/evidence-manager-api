@@ -1,7 +1,7 @@
 import type { Request } from 'express'
-import type { OwnedCaseResponse } from '../../shared/middleware/require-owned-case.js'
+import type { OwnedCaseResponse } from '../cases/require-owned-case.middleware.js'
 import { toPublicCase } from '../cases/cases.mapper.js'
-import type { ResolvedUploadResponse } from './files.middleware.js'
+import type { ResolvedUploadResponse } from './check-upload.middleware.js'
 import type { RequestUploadInput } from './files.schema.js'
 import type { FilesService } from './files.service.js'
 

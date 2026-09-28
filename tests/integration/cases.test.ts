@@ -1,7 +1,7 @@
 import request from 'supertest'
 import { afterAll, describe, expect, it } from 'vitest'
 import { createApp } from '../../src/app.js'
-import { createInMemoryStorage } from '../../src/modules/files/in-memory-storage.adapter.js'
+import { createInMemoryStorage } from '../../src/shared/storage/in-memory-storage.adapter.js'
 import { prisma } from '../../src/shared/database/prisma.js'
 import type {
   Case as CaseRow,

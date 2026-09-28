@@ -1,9 +1,9 @@
 import type { NextFunction, Request, Response } from 'express'
 import type { Case } from '../../generated/prisma/client.js'
-import { sessionOf } from '../../modules/auth/require-auth.js'
-import { prisma } from '../database/prisma.js'
-import { caseNotFound, Forbidden } from '../errors/app-error.js'
-import { ErrorCode } from '../errors/error-codes.js'
+import { sessionOf } from '../auth/require-auth.middleware.js'
+import { prisma } from '../../shared/database/prisma.js'
+import { caseNotFound, Forbidden } from '../../shared/errors/app-error.js'
+import { ErrorCode } from '../../shared/errors/error-codes.js'
 
 // What the guard leaves for the handler after it: the case, found and checked.
 export type OwnedCaseResponse = Response<unknown, { case: Case }>

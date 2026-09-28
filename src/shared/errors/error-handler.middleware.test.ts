@@ -6,7 +6,7 @@ import { listen, problemOf } from '../../../tests/helpers.js'
 import { httpLogger } from '../logging/logger.js'
 import { PayloadTooLarge } from './app-error.js'
 import { ErrorCode } from './error-codes.js'
-import { errorHandler } from './error-handler.js'
+import { errorHandler } from './error-handler.middleware.js'
 
 // No route throws these yet, so a minimal app with the real middlewares does.
 const testApp = express()

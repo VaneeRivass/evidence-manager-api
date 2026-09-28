@@ -7,8 +7,8 @@ import {
   sampleUser as user,
   withSession,
 } from '../../../tests/helpers.js'
-import { errorHandler } from '../../shared/errors/error-handler.js'
-import { requireAuth } from './require-auth.js'
+import { errorHandler } from '../../shared/errors/error-handler.middleware.js'
+import { requireAuth } from './require-auth.middleware.js'
 
 // Answers with whatever requireAuth left on the request, so each test sees
 // exactly what a real handler behind it would receive.

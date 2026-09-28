@@ -3,10 +3,13 @@ import type { Case } from '../../generated/prisma/client.js'
 import { env } from '../../shared/config/env.js'
 import { BadRequest } from '../../shared/errors/app-error.js'
 import { ErrorCode } from '../../shared/errors/error-codes.js'
-import { sessionOf } from '../auth/require-auth.js'
-import type { CompleteUploadInput, RequestUploadInput } from './files.schema.js'
-import { isAllowedContentType } from './files.service.js'
-import { type ResolvedUpload, resolveUploadKey } from './storage-key.js'
+import { sessionOf } from '../auth/require-auth.middleware.js'
+import {
+  type CompleteUploadInput,
+  isAllowedContentType,
+  type RequestUploadInput,
+} from './files.schema.js'
+import { type ResolvedUpload, resolveUploadKey } from './file-path.js'
 
 // What checkUploadKey adds to res.locals: the key, resolved.
 type UploadLocals = { upload: ResolvedUpload }
