@@ -3,7 +3,7 @@ import {
   buildPendingKey,
   resolveUploadKey,
   sanitiseFileName,
-} from './storage-key.js'
+} from './file-path.js'
 
 const userId = '8f3a1c2e-0000-0000-0000-000000000000'
 const caseId = 'c14b0000-0000-0000-0000-000000000000'

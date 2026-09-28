@@ -1,6 +1,7 @@
 import * as z from 'zod'
+import { env } from '../../shared/config/env.js'
 import { MAX_FILE_NAME_BYTES } from './files.constants.js'
-import { fitsNameLimit, sanitiseFileName } from './storage-key.js'
+import { fitsNameLimit, sanitiseFileName } from './file-path.js'
 
 // RF-10 · within MAX_FILE_NAME_BYTES. Something must survive sanitising, or
 // the key would end in the uuid alone.
@@ -40,3 +41,8 @@ export type RequestUploadInput = z.infer<typeof requestUploadSchema>
 export const completeUploadSchema = z.object({ key: z.string() })
 
 export type CompleteUploadInput = z.infer<typeof completeUploadSchema>
+
+// RF-10 · RF-11 · MIME types ignore case. Checked on the declared type before
+// the case is queried, and again on the real type storage reports.
+export const isAllowedContentType = (contentType: string): boolean =>
+  env.ALLOWED_MIME_TYPES.includes(contentType.toLowerCase())

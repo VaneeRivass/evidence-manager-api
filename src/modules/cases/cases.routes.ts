@@ -1,12 +1,12 @@
 import { Router } from 'express'
-import { requireAuth } from '../auth/require-auth.js'
-import type { StoragePort } from '../files/storage.port.js'
-import { requireOwnedCase } from '../../shared/middleware/require-owned-case.js'
+import { requireAuth } from '../auth/require-auth.middleware.js'
+import type { StoragePort } from '../../shared/storage/storage.port.js'
+import { requireOwnedCase } from './require-owned-case.middleware.js'
 import {
   validateBody,
   validateParams,
   validateQuery,
-} from '../../shared/middleware/validate.js'
+} from '../../shared/middleware/validate.middleware.js'
 import { create, list, read, remove, update } from './cases.controller.js'
 import {
   caseParams,

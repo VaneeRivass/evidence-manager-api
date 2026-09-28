@@ -1,8 +1,9 @@
 import type { Request, Response } from 'express'
-import { sessionOf } from './require-auth.js'
+import { sessionOf } from './require-auth.middleware.js'
 import { endSession, startSession } from './session.js'
 import type { LoginInput, RegisterInput } from './auth.schema.js'
-import { loginUser, registerUser, toPublicUser } from './auth.service.js'
+import { toPublicUser } from './auth.mapper.js'
+import { loginUser, registerUser } from './auth.service.js'
 
 // RF-01 · Express 5 forwards this rejection to the error handler on its own.
 export async function register(

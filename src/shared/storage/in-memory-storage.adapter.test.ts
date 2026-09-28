@@ -79,6 +79,7 @@ describe('createInMemoryStorage', () => {
     const { url } = await storage.signUploadUrl({
       key: 'pending/u1/x.pdf',
       contentType: 'application/pdf',
+      expiresIn: 300,
     })
 
     expect(url).toContain('pending/u1/x.pdf')
@@ -90,6 +91,7 @@ describe('createInMemoryStorage', () => {
     const { url, expiresIn } = await storage.signDownloadUrl({
       key: 'users/u1/x.pdf',
       fileName: 'x.pdf',
+      expiresIn: 60,
     })
 
     expect(url).toContain('users/u1/x.pdf')

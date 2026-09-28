@@ -20,6 +20,7 @@ describe('signUploadUrl', () => {
     const { url } = await storage.signUploadUrl({
       key: 'pending/u1/c1/abc-report.pdf',
       contentType: 'application/pdf',
+      expiresIn: 300,
     })
     expect(new URL(url).searchParams.get('X-Amz-SignedHeaders')).toBe(
       'content-type;host',
@@ -31,6 +32,7 @@ describe('signUploadUrl', () => {
     const { url } = await storage.signUploadUrl({
       key: 'pending/u1/c1/abc-report.pdf',
       contentType: 'application/pdf',
+      expiresIn: 300,
     })
     expect(url).not.toContain('checksum')
   })
@@ -40,6 +42,7 @@ describe('signUploadUrl', () => {
     const { url, expiresIn } = await storage.signUploadUrl({
       key: 'pending/u1/c1/abc-report.pdf',
       contentType: 'application/pdf',
+      expiresIn: 300,
     })
     expect(new URL(url).searchParams.get('X-Amz-Expires')).toBe(
       String(expiresIn),
@@ -53,6 +56,7 @@ describe('signDownloadUrl', () => {
     const { url, expiresIn } = await storage.signDownloadUrl({
       key: 'users/u1/cases/c1/abc-report.pdf',
       fileName: 'report.pdf',
+      expiresIn: 60,
     })
     expect(expiresIn).toBe(60)
     expect(new URL(url).searchParams.get('X-Amz-Expires')).toBe('60')
@@ -64,6 +68,7 @@ describe('signDownloadUrl', () => {
     const { url } = await storage.signDownloadUrl({
       key: 'users/u1/cases/c1/abc-report.pdf',
       fileName: 'report.pdf',
+      expiresIn: 60,
     })
     expect(new URL(url).searchParams.get('response-content-disposition')).toBe(
       `attachment; filename="report.pdf"; filename*=UTF-8''report.pdf`,
@@ -76,6 +81,7 @@ describe('signDownloadUrl', () => {
     const { url } = await storage.signDownloadUrl({
       key: 'users/u1/cases/c1/abc-x.pdf',
       fileName: 'Evidencia "año" 2026.pdf',
+      expiresIn: 60,
     })
     expect(new URL(url).searchParams.get('response-content-disposition')).toBe(
       `attachment; filename="Evidencia _a_o_ 2026.pdf"; filename*=UTF-8''Evidencia%20%22a%C3%B1o%22%202026.pdf`,
@@ -87,6 +93,7 @@ describe('signDownloadUrl', () => {
     const { url } = await storage.signDownloadUrl({
       key: 'users/u1/cases/c1/abc-x.pdf',
       fileName: 'Informe%20final.pdf',
+      expiresIn: 60,
     })
     expect(new URL(url).searchParams.get('response-content-disposition')).toBe(
       `attachment; filename="Informe_20final.pdf"; filename*=UTF-8''Informe%2520final.pdf`,
@@ -98,6 +105,7 @@ describe('signDownloadUrl', () => {
     const { url } = await storage.signDownloadUrl({
       key: 'users/u1/cases/c1/abc-x.png',
       fileName: 'Foto 📷.png',
+      expiresIn: 60,
     })
     expect(
       new URL(url).searchParams.get('response-content-disposition'),

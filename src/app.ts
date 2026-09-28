@@ -2,13 +2,16 @@ import express, { type Express } from 'express'
 // Also validates the environment on import, on every entry point, Vercel
 // included, which reaches this file through api/index.ts and never runs server.ts.
 import { env } from './shared/config/env.js'
-import { errorHandler, notFoundHandler } from './shared/errors/error-handler.js'
+import {
+  errorHandler,
+  notFoundHandler,
+} from './shared/errors/error-handler.middleware.js'
 import { httpLogger } from './shared/logging/logger.js'
 import { authRouter } from './modules/auth/auth.routes.js'
 import { createCasesRouter } from './modules/cases/cases.routes.js'
 import { createFilesRouter } from './modules/files/files.routes.js'
-import { createR2Storage } from './modules/files/r2-storage.adapter.js'
-import type { StoragePort } from './modules/files/storage.port.js'
+import { createR2Storage } from './shared/storage/r2-storage.adapter.js'
+import type { StoragePort } from './shared/storage/storage.port.js'
 
 // Builds the application and returns it. It never calls listen(): server.ts
 // does that for a long-lived process, api/index.ts hands it to Vercel, and

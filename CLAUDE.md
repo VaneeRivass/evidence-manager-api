@@ -41,21 +41,25 @@ Read before writing or changing code:
 ```
 src/
 ├── modules/
-│   ├── auth/     auth.routes · auth.controller · auth.service · auth.schema
+│   ├── auth/     auth.routes · auth.controller · auth.service · auth.schema · auth.mapper
 │   │             session        the session cookie and its token: name, attributes, sign, verify
-│   │             require-auth   the middleware that reads it
+│   │             require-auth.middleware   requireAuth, the middleware that reads it
 │   │             express.d      declares req.user, the session
 │   ├── cases/    cases.routes · cases.controller · cases.service · cases.schema · cases.mapper
-│   └── files/    files.routes · files.controller · files.service · files.schema
-│                 files.middleware  checkDeclaredFile, checkUploadKey: before the case is queried
-│                 storage-key    the storage key: built for an upload, resolved on confirmation
-│                 storage.port · r2-storage.adapter · in-memory-storage.adapter (the tests' double)
+│   │             require-owned-case.middleware   requireOwnedCase: the case exists, is live, is yours
+│   └── files/    files.routes · files.controller · files.schema · files.constants
+│                 files.service            ask for an upload link, ask for a download link
+│                 confirm-upload.service   confirm an upload (RF-11), and everything that can go wrong
+│                 check-upload.middleware  checkDeclaredFile, checkUploadKey: before the case is queried
+│                 file-path                where a file sits in storage: built for an upload, resolved on confirmation
 ├── shared/       infrastructure any module uses, knowing nothing of the business
 │   ├── config/       env.ts — a Zod schema over process.env
 │   ├── database/     prisma.ts — single client instance
-│   ├── errors/       app-error · error-codes · error-handler (RFC 9457)
+│   ├── errors/       app-error · error-codes · error-handler.middleware (RFC 9457)
 │   ├── logging/      logger.ts — pino + pino-http, with redaction
-│   └── middleware/   require-owned-case · validateBody
+│   ├── storage/      storage.port · r2-storage.adapter · in-memory-storage.adapter (the tests' double):
+│   │                 any object store, knowing nothing of cases; link lifetimes come from the caller
+│   └── middleware/   validate.middleware — validateBody, validateQuery, validateParams
 ├── app.ts        createApp(storage) builds the app; `app` is it with R2, the one place storage is chosen. Never calls listen()
 └── server.ts     app.listen()        → local and Render
 
@@ -74,11 +78,14 @@ on its own.
 **Organised by feature, not by file type.** Working on cases touches four files that sit
 together. **Not hexagonal layers**: see `docs/adr/0006`.
 
-**`shared/` is infrastructure only.** Whatever belongs to one feature lives in that
-module, even when other modules use it — the session is auth's, `requireAuth` included.
-`require-owned-case` stays in `shared/middleware/` because both `cases` and `files` routes
-need it. **Error codes stay central** in `shared/errors/error-codes.ts`: they are the
-contract with the client, and one list is what the client switches on.
+**`shared/` is infrastructure only: what knows nothing of the business.** Whatever belongs
+to one feature lives in that module, even when other modules use it — the session is
+auth's, `requireAuth` included, and `requireOwnedCase` is cases', though the file routes use
+it too. `validate.middleware` stays in `shared/`: it checks any schema and knows no feature.
+**Error codes stay central** in `shared/errors/error-codes.ts`: they are the
+contract with the client, and one list is what the client switches on. The few functions
+that build an error shared by several modules, like `caseNotFound`, stay beside them in
+`shared/errors/app-error.ts`, so a service never imports a middleware to throw one.
 
 **Controllers translate HTTP and hold no business rules.** Services hold the rules and know
 nothing about `req` or `res`, which is what makes them testable without a server.
@@ -102,10 +109,11 @@ export function createFilesService(storage: StoragePort) { … }
 ```
 
 A service that also needs the database imports `prisma` and receives the storage —
-`deleteCase(item, storage)`. It is the same rule applied to two dependencies: import what
+`deleteCase(ownedCase, storage)`. It is the same rule applied to two dependencies: import what
 runs locally, receive what does not.
 
-**Middleware order: cheap before expensive.**
+**Middleware order: cheap before expensive.** A middleware file carries the `.middleware`
+suffix, like every other file carries its role.
 
 ```ts
 router.patch('/:id',
@@ -149,7 +157,7 @@ There is no cleanup process: serverless has no background jobs.
 validated between 8 and 72 bytes.
 
 **Nothing leaves in the database's shape.** Every module maps what it returns through an
-explicit mapper that **names the fields that go out**, never the ones it hides: `toPublicUser`
+explicit mapper that **names the fields that go out**, never the ones it hides: `auth.mapper.ts`
 for users, `cases.mapper.ts` for cases. A column added to the schema tomorrow does not leak
 on its own. An enum's values are not copied into a validator either: they are read from
 `src/generated/prisma/enums.ts`, so a state added to the schema cannot be rejected by a

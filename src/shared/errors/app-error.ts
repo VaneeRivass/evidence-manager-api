@@ -1,7 +1,7 @@
 import { ErrorCode, type FieldCode } from './error-codes.js'
 
 // A failure the code expects and knows how to name. Services throw it without
-// knowing anything about HTTP; error-handler.ts turns it into a response.
+// knowing anything about HTTP; error-handler.middleware.ts turns it into a response.
 //
 // The `code` travels to the client, which composes the Spanish text from it.
 // The `message` is for whoever debugs: it goes to the log, never to the response.
@@ -41,7 +41,7 @@ export const caseNotFound = (): AppError =>
 export type FieldError = { field: string; code: FieldCode; params?: Params }
 
 // 400 with a per-field breakdown, instead of the single top-level `params`
-// every other AppError carries. error-handler.ts reads `.errors` off it.
+// every other AppError carries. error-handler.middleware.ts reads `.errors` off it.
 export class ValidationError extends AppError {
   constructor(
     readonly errors: FieldError[],

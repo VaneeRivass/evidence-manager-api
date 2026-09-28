@@ -1,5 +1,6 @@
-// The key of an evidence file in storage: built for an upload, then resolved
-// on confirmation into where the file goes and what it is called.
+// Where an evidence file sits in storage — its path, what S3 and R2 call the
+// object's key: built for an upload, then resolved on confirmation into where
+// the file goes and what it is called.
 import { randomUUID } from 'node:crypto'
 import { MAX_FILE_NAME_BYTES } from './files.constants.js'
 
