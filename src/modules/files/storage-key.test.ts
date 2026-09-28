@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildPendingKey, isPendingKeyOf } from './storage-key.js'
+import { buildPendingKey, resolveUploadKey } from './storage-key.js'
 
 const userId = '8f3a1c2e-0000-0000-0000-000000000000'
 const caseId = 'c14b0000-0000-0000-0000-000000000000'
@@ -59,29 +59,39 @@ describe('buildPendingKey', () => {
   })
 })
 
-describe('isPendingKeyOf', () => {
+describe('resolveUploadKey', () => {
   const uuid = '7d2e9f01-4a6b-4c3d-8e9f-0a1b2c3d4e5f'
   const prefix = `pending/${userId}/${caseId}/${uuid}-`
 
-  // RF-11 · the key upload-url signs is always accepted
-  it('accepts a key buildPendingKey made', () => {
-    const key = buildPendingKey(userId, caseId, 'Informe Final.pdf')
-    expect(isPendingKeyOf(key, userId, caseId)).toBe(true)
+  // RF-11 · RF-11b · same user, case, uuid and name, moved from pending/ to
+  // users/…/cases/…
+  it('resolves a key signed for this case into its final place and name', () => {
+    expect(
+      resolveUploadKey(`${prefix}Informe Final.pdf`, userId, caseId),
+    ).toEqual({
+      finalKey: `users/${userId}/cases/${caseId}/${uuid}-Informe Final.pdf`,
+      fileName: 'Informe Final.pdf',
+    })
+  })
+
+  // RF-11 · signed for another case of the same user
+  it('refuses a key signed for another case', () => {
+    expect(resolveUploadKey(`${prefix}report.pdf`, userId, 'other')).toBeNull()
   })
 
   // RF-11 · upload-url never signs a name over 255 bytes; storage would
   // answer an error the API cannot name
   it('refuses a name over 255 bytes', () => {
-    expect(isPendingKeyOf(`${prefix}${'a'.repeat(256)}`, userId, caseId)).toBe(
-      false,
-    )
+    expect(
+      resolveUploadKey(`${prefix}${'a'.repeat(256)}`, userId, caseId),
+    ).toBeNull()
   })
 
   // RF-11 · upload-url strips control characters, so a key carrying one was
   // not signed by it
   it('refuses a name carrying a control character', () => {
-    expect(isPendingKeyOf(`${prefix}report\u0000.pdf`, userId, caseId)).toBe(
-      false,
-    )
+    expect(
+      resolveUploadKey(`${prefix}report\u0000.pdf`, userId, caseId),
+    ).toBeNull()
   })
 })

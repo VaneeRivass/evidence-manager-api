@@ -74,9 +74,9 @@ describe('createInMemoryStorage', () => {
   })
 
   // RF-10 · a link the caller uses to PUT the file directly against storage
-  it('createUploadUrl returns a url naming the key', async () => {
+  it('signUploadUrl returns a url naming the key', async () => {
     const storage = createInMemoryStorage()
-    const { url } = await storage.createUploadUrl({
+    const { url } = await storage.signUploadUrl({
       key: 'pending/u1/x.pdf',
       contentType: 'application/pdf',
     })
@@ -85,9 +85,9 @@ describe('createInMemoryStorage', () => {
   })
 
   // RF-12 · a link the caller uses to GET the file directly from storage
-  it('createDownloadUrl returns a url naming the key and the file', async () => {
+  it('signDownloadUrl returns a url naming the key and the file', async () => {
     const storage = createInMemoryStorage()
-    const { url, expiresIn } = await storage.createDownloadUrl({
+    const { url, expiresIn } = await storage.signDownloadUrl({
       key: 'users/u1/x.pdf',
       fileName: 'x.pdf',
     })

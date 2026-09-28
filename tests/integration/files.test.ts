@@ -55,7 +55,7 @@ async function uploadFile(
 }
 
 // pending/{user}/{case}/{name} → users/{user}/cases/{case}/{name}. Written
-// here on purpose rather than imported: if the service's own finalKeyOf is
+// here on purpose rather than imported: if the service's own resolveUploadKey is
 // wrong, the tests catch it instead of repeating the mistake.
 const expectedFinalKey = (pendingKey: string) =>
   pendingKey.replace(/^pending\/([^/]+)\/([^/]+)\//, 'users/$1/cases/$2/')
@@ -81,7 +81,7 @@ const storeOn = (caseId: string, key: string) =>
 const markDeleted = (caseId: string) =>
   prisma.case.update({ where: { id: caseId }, data: { deletedAt: new Date() } })
 
-// A confirmable upload, and the case as loadOwnedCase read it before any change.
+// A confirmable upload, and the case as requireOwnedCase read it before any change.
 async function uploadedAndStale() {
   const user = await signIn(server)
   const caseId = await createCase(user)
@@ -575,7 +575,7 @@ describe.each([
   })
 })
 
-// RF-11 · loadOwnedCase read the case, then storage is asked and the copy
+// RF-11 · requireOwnedCase read the case, then storage is asked and the copy
 // made: in between, another request can change the case. The service gets
 // the case as the guard saw it, before that change.
 describe('a case that changes between the check and the write', () => {

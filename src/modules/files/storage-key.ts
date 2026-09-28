@@ -1,22 +1,26 @@
-// The key of an evidence file in storage: built for an upload, checked on
-// confirmation, read back for its final place and its name.
+// The key of an evidence file in storage: built for an upload, then resolved
+// on confirmation into where the file goes and what it is called.
 import { randomUUID } from 'node:crypto'
 import { MAX_FILE_NAME_BYTES } from './files.constants.js'
 
 // pending/{userId}/{caseId}/{uuid}-{name}: the one description of the
-// layout, which buildPendingKey writes and every other function reads. The
-// name is a single segment, with no separator whatever it says.
+// layout, which buildPendingKey writes and parseUploadKey reads. The name is
+// a single segment, with no separator whatever it says.
 const PENDING_KEY =
-  /^pending\/(?<userId>[^/]+)\/(?<caseId>[^/]+)\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}-(?<name>[^/\\]+)$/
+  /^pending\/(?<userId>[^/]+)\/(?<caseId>[^/]+)\/(?<uuid>[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})-(?<name>[^/\\]+)$/
 
-interface PendingKeyParts {
+interface UploadKeyParts {
   userId: string
   caseId: string
+  uuid: string
   name: string
 }
 
-const partsOf = (key: string): PendingKeyParts | undefined =>
-  PENDING_KEY.exec(key)?.groups as PendingKeyParts | undefined
+// What confirmation needs from a key signed for this case.
+export interface ResolvedUpload {
+  finalKey: string
+  fileName: string
+}
 
 // docs/modelo-de-datos.md §5 · without separators a name cannot leave its
 // folder, so `..` is harmless and kept (`report..pdf` is a valid name).
@@ -40,43 +44,40 @@ export function buildPendingKey(
   return `pending/${userId}/${caseId}/${randomUUID()}-${sanitiseFileName(fileName)}`
 }
 
-// RF-11 · the exact shape buildPendingKey gives, for this user and case. A
-// prefix check alone would pass `pending/{user}/{case}/../../other/…`, which
-// a client normalising the path would send to another folder. The name must
-// be one upload-url could have produced: anything else — overlong, or with a
-// control character — would make storage answer an error the API has no code
+// Splits the text of a key into its pieces, or undefined if it has another
+// shape: "pending/ana/7/7d2e…-Informe.pdf" → { userId: "ana", caseId: "7", … }.
+const parseUploadKey = (pendingKey: string): UploadKeyParts | undefined =>
+  PENDING_KEY.exec(pendingKey)?.groups as UploadKeyParts | undefined
+
+// RF-11 · RF-11b · the key a client confirms, resolved into where the file
+// goes and what it is called — or null if it was not signed for this user and
+// case. Where the file goes is only ever worked out from a key that passed
+// the check.
+//
+// The whole shape is checked, not a prefix: `pending/{user}/{case}/../../x`
+// starts right but could reach another folder once a client normalises the
+// path. The name must be one upload-url could have produced: overlong, or
+// with a control character, storage would answer an error the API has no code
 // for, and the client would get a 500.
-export function isPendingKeyOf(
-  key: string,
+export function resolveUploadKey(
+  pendingKey: string,
   userId: string,
   caseId: string,
-): boolean {
-  const parts = partsOf(key)
-  if (!parts) return false
+): ResolvedUpload | null {
+  const parts = parseUploadKey(pendingKey)
+  if (!parts) return null
 
-  const { userId: keyUserId, caseId: keyCaseId, name } = parts
-  return (
-    keyUserId === userId &&
-    keyCaseId === caseId &&
+  const { name } = parts
+  const signedForThisCase =
+    parts.userId === userId &&
+    parts.caseId === caseId &&
     sanitiseFileName(name) === name &&
     fitsNameLimit(name)
-  )
-}
+  if (!signedForThisCase) return null
 
-// RF-11b · where a confirmed upload lives: the same user, case, uuid and
-// name, out of pending/ so the 24-hour rule never reaches it. Only for a key
-// isPendingKeyOf accepted.
-export function finalKeyOf(pendingKey: string): string {
-  return pendingKey.replace(
-    /^pending\/([^/]+)\/([^/]+)\//,
-    'users/$1/cases/$2/',
-  )
-}
-
-// RF-11 · the sanitised name the key carries after its uuid and dash. Only
-// for a key isPendingKeyOf accepted: any other is our bug, not the client's.
-export function fileNameOf(pendingKey: string): string {
-  const parts = partsOf(pendingKey)
-  if (!parts) throw new Error(`Not a pending key: ${pendingKey}`)
-  return parts.name
+  return {
+    // Out of pending/, so the 24-hour rule never reaches it.
+    finalKey: `users/${userId}/cases/${caseId}/${parts.uuid}-${name}`,
+    fileName: name,
+  }
 }

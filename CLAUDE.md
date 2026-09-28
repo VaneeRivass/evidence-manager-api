@@ -47,13 +47,14 @@ src/
 │   │             express.d      declares req.user, the session
 │   ├── cases/    cases.routes · cases.controller · cases.service · cases.schema · cases.mapper
 │   └── files/    files.routes · files.controller · files.service · files.schema
+│                 storage-key    the storage key: built for an upload, resolved on confirmation
 │                 storage.port · r2-storage.adapter · in-memory-storage.adapter (the tests' double)
 ├── shared/       infrastructure any module uses, knowing nothing of the business
 │   ├── config/       env.ts — a Zod schema over process.env
 │   ├── database/     prisma.ts — single client instance
 │   ├── errors/       app-error · error-codes · error-handler (RFC 9457)
 │   ├── logging/      logger.ts — pino + pino-http, with redaction
-│   └── middleware/   load-owned-case · validate
+│   └── middleware/   require-owned-case · validate
 ├── app.ts        createApp(storage) builds the app; `app` is it with R2, the one place storage is chosen. Never calls listen()
 └── server.ts     app.listen()        → local and Render
 
@@ -74,7 +75,7 @@ together. **Not hexagonal layers**: see `docs/adr/0006`.
 
 **`shared/` is infrastructure only.** Whatever belongs to one feature lives in that
 module, even when other modules use it — the session is auth's, `requireAuth` included.
-`load-owned-case` stays in `shared/middleware/` because both `cases` and `files` routes
+`require-owned-case` stays in `shared/middleware/` because both `cases` and `files` routes
 need it. **Error codes stay central** in `shared/errors/error-codes.ts`: they are the
 contract with the client, and one list is what the client switches on.
 
@@ -110,14 +111,14 @@ router.patch('/:id',
   requireAuth,                 // crypto, no database
   validateParams(idSchema),    // is :id a UUID?     → 400
   validate(updateCaseSchema),  // read the body, is it valid? → 400 / 413
-  loadOwnedCase,               // NOW the query      → 404 / 403
+  requireOwnedCase,            // NOW the query      → 404 / 403
   update,
 )
 ```
 
 Validating after querying wastes a round trip on every malformed request.
 
-**Ownership lives in one middleware.** `loadOwnedCase` filters `deletedAt: null`, throws
+**Ownership lives in one middleware.** `requireOwnedCase` filters `deletedAt: null`, throws
 `404` when absent and `403` when it belongs to someone else. Never copy that check into a
 controller: copied five times it gets forgotten once, and that is the vulnerability.
 

@@ -14,10 +14,10 @@ const storage = createR2Storage({
   secretAccessKey: 'test-secret',
 })
 
-describe('createUploadUrl', () => {
+describe('signUploadUrl', () => {
   // RF-10 · the PUT must send the same Content-Type that was allowed
   it('puts the content type inside the signature', async () => {
-    const { url } = await storage.createUploadUrl({
+    const { url } = await storage.signUploadUrl({
       key: 'pending/u1/c1/abc-report.pdf',
       contentType: 'application/pdf',
     })
@@ -28,7 +28,7 @@ describe('createUploadUrl', () => {
 
   // RF-10 · the API never holds the body, so a checksum would be of nothing
   it('carries no checksum of the body', async () => {
-    const { url } = await storage.createUploadUrl({
+    const { url } = await storage.signUploadUrl({
       key: 'pending/u1/c1/abc-report.pdf',
       contentType: 'application/pdf',
     })
@@ -37,7 +37,7 @@ describe('createUploadUrl', () => {
 
   // RF-10 · the lifetime the client is told is the one inside the signature
   it('reports the same lifetime it signs', async () => {
-    const { url, expiresIn } = await storage.createUploadUrl({
+    const { url, expiresIn } = await storage.signUploadUrl({
       key: 'pending/u1/c1/abc-report.pdf',
       contentType: 'application/pdf',
     })
@@ -47,10 +47,10 @@ describe('createUploadUrl', () => {
   })
 })
 
-describe('createDownloadUrl', () => {
+describe('signDownloadUrl', () => {
   // RF-12 · the link lives 60 seconds
   it('signs a link that lives 60 seconds', async () => {
-    const { url, expiresIn } = await storage.createDownloadUrl({
+    const { url, expiresIn } = await storage.signDownloadUrl({
       key: 'users/u1/cases/c1/abc-report.pdf',
       fileName: 'report.pdf',
     })
@@ -61,7 +61,7 @@ describe('createDownloadUrl', () => {
   // ADR-0004 · RF-12 · saved, never opened in the browser, and under the
   // file's name instead of its key
   it('asks storage to serve the file as an attachment named after it', async () => {
-    const { url } = await storage.createDownloadUrl({
+    const { url } = await storage.signDownloadUrl({
       key: 'users/u1/cases/c1/abc-report.pdf',
       fileName: 'report.pdf',
     })
@@ -73,7 +73,7 @@ describe('createDownloadUrl', () => {
   // RF-12 · RFC 6266: the plain form is ASCII with no quote to break out of;
   // the encoded one keeps the real name
   it('keeps a non-ASCII name in the encoded form only', async () => {
-    const { url } = await storage.createDownloadUrl({
+    const { url } = await storage.signDownloadUrl({
       key: 'users/u1/cases/c1/abc-x.pdf',
       fileName: 'Evidencia "año" 2026.pdf',
     })
@@ -84,7 +84,7 @@ describe('createDownloadUrl', () => {
 
   // RF-12 · RFC 6266 appendix D: some clients percent-decode the plain form
   it('keeps no percent sign in the plain form', async () => {
-    const { url } = await storage.createDownloadUrl({
+    const { url } = await storage.signDownloadUrl({
       key: 'users/u1/cases/c1/abc-x.pdf',
       fileName: 'Informe%20final.pdf',
     })
@@ -95,7 +95,7 @@ describe('createDownloadUrl', () => {
 
   // RF-12 · one character, one underscore, even past the 16-bit range
   it('replaces an emoji with a single underscore in the plain form', async () => {
-    const { url } = await storage.createDownloadUrl({
+    const { url } = await storage.signDownloadUrl({
       key: 'users/u1/cases/c1/abc-x.png',
       fileName: 'Foto 📷.png',
     })

@@ -65,7 +65,7 @@ export function createR2Storage(config: {
   })
 
   return {
-    async createUploadUrl({ key, contentType }) {
+    async signUploadUrl({ key, contentType }) {
       const command = new PutObjectCommand({
         Bucket: bucket,
         Key: key,
@@ -81,7 +81,7 @@ export function createR2Storage(config: {
       return { url, expiresIn: UPLOAD_URL_TTL_SECONDS }
     },
 
-    async createDownloadUrl({ key, fileName }) {
+    async signDownloadUrl({ key, fileName }) {
       const command = new GetObjectCommand({
         Bucket: bucket,
         Key: key,
