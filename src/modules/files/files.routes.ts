@@ -12,7 +12,7 @@ import { completeUploadSchema, requestUploadSchema } from './files.schema.js'
 import { createFilesService } from './files.service.js'
 import type { StoragePort } from './storage.port.js'
 
-// Mounted under /cases, beside casesRouter: every route here belongs to one
+// Mounted under /cases, beside the cases routes: every route here belongs to one
 // case and passes the same ownership guard.
 export function createFilesRouter(storage: StoragePort): Router {
   const files = createFilesService(storage)

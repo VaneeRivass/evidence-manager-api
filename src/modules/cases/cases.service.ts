@@ -1,7 +1,7 @@
 import { type Case, Prisma } from '../../generated/prisma/client.js'
 import { isMissingRow, prisma } from '../../shared/database/prisma.js'
-import { NotFound } from '../../shared/errors/app-error.js'
-import { ErrorCode } from '../../shared/errors/error-codes.js'
+import { caseNotFound } from '../../shared/middleware/load-owned-case.js'
+import type { StoragePort } from '../files/storage.port.js'
 import type {
   CreateCaseInput,
   ListCasesQuery,
@@ -61,7 +61,7 @@ async function updateLiveCase(
     return await prisma.case.update({ where: { id, deletedAt: null }, data })
   } catch (error) {
     if (isMissingRow(error)) {
-      throw NotFound(ErrorCode.CASE_NOT_FOUND, 'Case not found')
+      throw caseNotFound()
     }
 
     throw error
@@ -96,7 +96,33 @@ export async function updateCase(
   return updateLiveCase(current.id, changes)
 }
 
-// RF-09 · RNF-05 · the row stays as the trail; only the key is cleared.
-// Destroying the file first is added once storage exists — see ADR-0005.
-export const deleteCase = (id: string): Promise<Case> =>
-  updateLiveCase(id, { deletedAt: new Date(), fileKey: null })
+// RF-09 · RNF-05 · the row stays as the trail; only the key is cleared. The
+// file is destroyed FIRST (ADR-0005): if storage fails, the error reaches the
+// client and the case is untouched, so deleting again is safe. Storage cannot
+// run locally, so it is received, not imported (ADR-0006).
+export async function deleteCase(
+  item: Case,
+  storage: StoragePort,
+): Promise<Case> {
+  if (item.fileKey !== null) await storage.deleteObject(item.fileKey)
+
+  try {
+    return await prisma.case.update({
+      // Only while the case still holds the file that was destroyed. fileKey
+      // is unique, so inside AND to be read as a filter, not a lookup.
+      where: { id: item.id, deletedAt: null, AND: { fileKey: item.fileKey } },
+      data: { deletedAt: new Date(), fileKey: null },
+    })
+  } catch (error) {
+    if (!isMissingRow(error)) throw error
+  }
+
+  // The case changed after the guard read it: deleted by another request, or
+  // given a file by a confirmation. Deleted again with what it holds now. A
+  // file is never replaced, so this happens at most once.
+  const current = await prisma.case.findFirst({
+    where: { id: item.id, deletedAt: null },
+  })
+  if (!current) throw caseNotFound()
+  return deleteCase(current, storage)
+}

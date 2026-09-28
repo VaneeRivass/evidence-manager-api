@@ -1,6 +1,7 @@
 import request from 'supertest'
 import { afterAll, describe, expect, it } from 'vitest'
-import { app } from '../../src/app.js'
+import { createApp } from '../../src/app.js'
+import { createInMemoryStorage } from '../../src/modules/files/in-memory-storage.adapter.js'
 import { prisma } from '../../src/shared/database/prisma.js'
 import type {
   Case as CaseRow,
@@ -15,11 +16,22 @@ import { AppError } from '../../src/shared/errors/app-error.js'
 import { type Signed, signIn } from '../integration-setup.js'
 import { listen } from '../helpers.js'
 
-// Exercises the real app: casesRouter, requireAuth, the validators and Prisma
-// against PostgreSQL. It signs in through /auth because the session is what
-// decides whose cases these are.
-const server = await listen(app)
+// Exercises the real app: the cases routes, requireAuth, the validators and
+// Prisma against PostgreSQL. It signs in through /auth because the session is
+// what decides whose cases these are. Storage is the in-memory double
+// (ADR-0006): deleting a case destroys its file there.
+const storage = createInMemoryStorage()
+const server = await listen(createApp(storage))
 afterAll(() => server.close())
+
+// The same app over the same database, with a storage that fails every delete.
+const failingServer = await listen(
+  createApp({
+    ...storage,
+    deleteObject: () => Promise.reject(new Error('R2 unavailable')),
+  }),
+)
+afterAll(() => failingServer.close())
 
 // Straight into the database, so a test can set what the API never accepts:
 // another owner, a status, a deletion mark, a fixed timestamp.
@@ -530,6 +542,54 @@ describe('DELETE /cases/:id', () => {
     expect((await readCase(owner, id)).status).toBe(404)
     expect((await listCases(owner)).body).toMatchObject({ total: 0 })
   })
+
+  // RF-09 · nothing is left behind in storage
+  it('destroys the case’s file in storage', async () => {
+    const owner = await signIn(server)
+    const fileKey = `users/${owner.userId}/cases/c1/abc-evidence.pdf`
+    storage.simulateUpload(fileKey, {
+      size: 5120,
+      contentType: 'application/pdf',
+    })
+    const { id } = await seed(owner.userId, { fileKey })
+
+    const res = await deleteCase(owner, id)
+
+    expect(res.status).toBe(204)
+    expect(await storage.headObject(fileKey)).toBeNull()
+  })
+})
+
+// RF-09 · storage refusing to destroy the file, through failingServer.
+describe('DELETE /cases/:id when storage cannot destroy the file', () => {
+  const deleteThrough = ({ cookie }: Signed, id: string) =>
+    request(failingServer).delete(`/cases/${id}`).set('Cookie', cookie)
+
+  // Storage first: if it fails, the case is still there, with its file, and
+  // deleting again is safe
+  it('answers 500 and leaves the case untouched', async () => {
+    const owner = await signIn(server)
+    const before = await seed(owner.userId, {
+      fileKey: `users/${owner.userId}/cases/c1/abc-evidence.pdf`,
+    })
+
+    const res = await deleteThrough(owner, before.id)
+
+    expect(res.status).toBe(500)
+    expect(
+      await prisma.case.findUniqueOrThrow({ where: { id: before.id } }),
+    ).toEqual(before)
+  })
+
+  // A case with no file never asks storage, so its failure cannot matter
+  it('still deletes a case with no file', async () => {
+    const owner = await signIn(server)
+    const { id } = await seed(owner.userId, {})
+
+    const res = await deleteThrough(owner, id)
+
+    expect(res.status).toBe(204)
+  })
 })
 
 // RF-09b · the guard reads the case, then the write happens: in between, another
@@ -540,7 +600,10 @@ describe('a case deleted between the check and the write', () => {
       action: 'update',
       run: (item: CaseRow) => updateCaseRow(item, { title: 'New' }),
     },
-    { action: 'delete', run: (item: CaseRow) => deleteCaseRow(item.id) },
+    {
+      action: 'delete',
+      run: (item: CaseRow) => deleteCaseRow(item, storage),
+    },
   ])('answers 404 instead of failing on $action', async ({ run }) => {
     const owner = await signIn(server)
     const item = await seed(owner.userId, { deletedAt: new Date() })
@@ -550,5 +613,28 @@ describe('a case deleted between the check and the write', () => {
       code: 'CASE_NOT_FOUND',
     })
     await expect(run(item)).rejects.toBeInstanceOf(AppError)
+  })
+})
+
+// RF-09 · the guard read the case with no file; a confirmation stored one
+// before the delete landed. Cleared without destroying it, that file would be
+// an orphan outside pending/, where nothing removes it.
+describe('a file confirmed between the check and the delete', () => {
+  it('destroys that file too', async () => {
+    const owner = await signIn(server)
+    const stale = await seed(owner.userId, {})
+    const fileKey = `users/${owner.userId}/cases/${stale.id}/abc-evidence.pdf`
+    storage.simulateUpload(fileKey, {
+      size: 5120,
+      contentType: 'application/pdf',
+    })
+    await prisma.case.update({ where: { id: stale.id }, data: { fileKey } })
+
+    await deleteCaseRow(stale, storage)
+
+    expect(await storage.headObject(fileKey)).toBeNull()
+    expect(
+      await prisma.case.findUniqueOrThrow({ where: { id: stale.id } }),
+    ).toMatchObject({ deletedAt: expect.any(Date) as Date, fileKey: null })
   })
 })
