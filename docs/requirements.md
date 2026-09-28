@@ -192,15 +192,26 @@ checks it belongs to whoever is asking.
 router.patch('/:id',
   requireAuth,                 // 1. cryptography. No database
   validateParams(idSchema),    // 2. is :id a UUID?     → 400
-  validate(updateCaseSchema),  // 3. read the body, is it valid? → 400 / 413
-  requireOwnedCase,            // 4. NOW the query      → 404 / 403
-  update,                      // 5. the work
+  validateBody(updateCaseSchema), // 3. read the body, is it valid? → 400 / 413
+  requireOwnedCase,               // 4. NOW the query      → 404 / 403
+  update,                         // 5. the work
 )
 ```
 
 **Cheap before expensive.** A request carrying a malformed identifier and an invalid body
 is rejected **without touching the database**. Validating after querying wastes a round
 trip on every malformed request.
+
+The file routes add one step before the query, for rules a schema cannot hold because they
+depend on the environment or on the session:
+
+| Route | Step | Rejects without querying |
+|---|---|---|
+| `POST /cases/:id/file/upload-url` | `checkDeclaredFile` | A type outside the allowlist, a declared size over the limit (RF-10) |
+| `POST /cases/:id/file/complete` | `checkUploadKey` | A key not signed for the session's user and the case in the URL (RF-11) |
+
+So a malformed request answers `400` even against someone else's case, as an invalid body
+already does: the `403` needs the query, and the query comes last.
 
 ---
 

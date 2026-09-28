@@ -32,6 +32,11 @@ export const NotFound = withStatus(404)
 export const Conflict = withStatus(409)
 export const PayloadTooLarge = withStatus(413)
 
+// RF-07 · RF-09b · one spelling of the 404, for the guard and for every write
+// that finds the case gone after the guard read it.
+export const caseNotFound = (): AppError =>
+  NotFound(ErrorCode.CASE_NOT_FOUND, 'Case not found')
+
 // One entry per invalid field. See docs/requirements.md RF-23 for the shape.
 export type FieldError = { field: string; code: FieldCode; params?: Params }
 

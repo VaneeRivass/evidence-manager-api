@@ -4,16 +4,16 @@ import { afterAll, describe, expect, it } from 'vitest'
 import * as z from 'zod'
 import { errorHandler } from '../errors/error-handler.js'
 import { listen } from '../../../tests/helpers.js'
-import { validate, validateParams, validateQuery } from './validate.js'
+import { validateBody, validateParams, validateQuery } from './validate.js'
 
 const schema = z.object({
   title: z.string().min(3),
   email: z.string().toLowerCase().pipe(z.email()),
 })
 
-// No body parser of its own: validate() reads the body.
+// No body parser of its own: validateBody() reads the body.
 const testApp = express()
-testApp.post('/test-route', validate(schema), (req, res) => {
+testApp.post('/test-route', validateBody(schema), (req, res) => {
   res.json(req.body)
 })
 // The parsed query is where validateQuery leaves it: Express 5 does not let
@@ -41,7 +41,7 @@ testApp.use(errorHandler)
 const server = await listen(testApp)
 afterAll(() => server.close())
 
-describe('validate', () => {
+describe('validateBody', () => {
   // RF-01 · RF-23 · one entry per invalid field, not just the first one
   it('answers 400 with a per-field breakdown', async () => {
     const res = await request(server)

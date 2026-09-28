@@ -6,7 +6,7 @@ import { ValidationError } from '../errors/app-error.js'
 import { FieldCode } from '../errors/error-codes.js'
 import { errorHandler, notFoundHandler } from '../errors/error-handler.js'
 import { createLoggers } from './logger.js'
-import { validate } from '../middleware/validate.js'
+import { validateBody } from '../middleware/validate.js'
 import { listen } from '../../../tests/helpers.js'
 
 // The app's own loggers, writing to an array instead of stdout, and at info:
@@ -30,7 +30,7 @@ app.post('/invalid', () => {
     { field: 'password', code: FieldCode.TOO_SHORT, params: { min: 8 } },
   ])
 })
-app.post('/parse', validate(z.object({})), (_req, res) => {
+app.post('/parse', validateBody(z.object({})), (_req, res) => {
   res.json({ ok: true })
 })
 app.get('/bug', () => {

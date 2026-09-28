@@ -3,7 +3,7 @@ import { requireAuth } from '../auth/require-auth.js'
 import type { StoragePort } from '../files/storage.port.js'
 import { requireOwnedCase } from '../../shared/middleware/require-owned-case.js'
 import {
-  validate,
+  validateBody,
   validateParams,
   validateQuery,
 } from '../../shared/middleware/validate.js'
@@ -22,7 +22,7 @@ export function createCasesRouter(storage: StoragePort): Router {
 
   // Cheap before expensive: the signature, then the id, the query or the body,
   // and only then the database. A malformed request never reaches it.
-  router.post('/', requireAuth, validate(createCaseSchema), create)
+  router.post('/', requireAuth, validateBody(createCaseSchema), create)
   router.get('/', requireAuth, validateQuery(listCasesQuery), list)
 
   router.get(
@@ -36,7 +36,7 @@ export function createCasesRouter(storage: StoragePort): Router {
     '/:id',
     requireAuth,
     validateParams(caseParams),
-    validate(updateCaseSchema),
+    validateBody(updateCaseSchema),
     requireOwnedCase,
     update,
   )
