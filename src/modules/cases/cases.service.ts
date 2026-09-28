@@ -1,5 +1,5 @@
 import { type Case, Prisma } from '../../generated/prisma/client.js'
-import { prisma } from '../../shared/database/prisma.js'
+import { isMissingRow, prisma } from '../../shared/database/prisma.js'
 import { NotFound } from '../../shared/errors/app-error.js'
 import { ErrorCode } from '../../shared/errors/error-codes.js'
 import type {
@@ -49,11 +49,6 @@ export async function listCases(
 
   return { items, total }
 }
-
-// P2025: the update's filter matched no row.
-const isMissingRow = (error: unknown): boolean =>
-  error instanceof Prisma.PrismaClientKnownRequestError &&
-  error.code === 'P2025'
 
 // RF-09b · loadOwnedCase read the case a moment earlier, so another request
 // can delete it before this write lands, and the filter then matches no row.

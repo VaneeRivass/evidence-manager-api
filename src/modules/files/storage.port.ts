@@ -18,8 +18,12 @@ export interface StoragePort {
     contentType: string
   }): Promise<SignedUrl>
 
-  // Served as an attachment, so the file is saved, never opened in the browser.
-  createDownloadUrl(params: { key: string }): Promise<SignedUrl>
+  // Served as an attachment under fileName, so the file is saved, never
+  // opened in the browser, and not named after its key.
+  createDownloadUrl(params: {
+    key: string
+    fileName: string
+  }): Promise<SignedUrl>
 
   // Null when nothing was uploaded, so "missing" is not confused with 0 bytes.
   headObject(key: string): Promise<ObjectMetadata | null>

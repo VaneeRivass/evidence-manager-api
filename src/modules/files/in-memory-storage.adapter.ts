@@ -25,9 +25,9 @@ export function createInMemoryStorage(): InMemoryStorage {
         expiresIn: UPLOAD_URL_TTL_SECONDS,
       }),
 
-    createDownloadUrl: ({ key }) =>
+    createDownloadUrl: ({ key, fileName }) =>
       Promise.resolve({
-        url: `memory://download/${key}`,
+        url: `memory://download/${key}?fileName=${fileName}`,
         expiresIn: DOWNLOAD_URL_TTL_SECONDS,
       }),
 

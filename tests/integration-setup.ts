@@ -1,6 +1,10 @@
+import type { Server } from 'node:http'
+import request from 'supertest'
 import { beforeAll, beforeEach } from 'vitest'
 import { registerUser } from '../src/modules/auth/auth.service.js'
+import type { Session } from '../src/modules/auth/session.js'
 import { prisma } from '../src/shared/database/prisma.js'
+import { sessionCookieOf, withSession } from './helpers.js'
 
 // Integration tests only: vitest.config.ts runs this before each of their
 // files. Nothing here connects on import, so the check below runs before the
@@ -62,4 +66,20 @@ export async function createUser(): Promise<{
   await registerUser({ email, password })
 
   return { email, password }
+}
+
+export type Signed = { cookie: string; userId: string }
+
+// A registered account with its session cookie, the way a browser would hold
+// it, plus the id every case it owns is stored under.
+export async function signIn(server: Server): Promise<Signed> {
+  const { email, password } = await createUser()
+  const res = await request(server)
+    .post('/auth/login')
+    .send({ email, password })
+  const token = sessionCookieOf(res)?.value
+
+  if (!token) throw new Error('signing in returned no session cookie')
+
+  return { cookie: withSession(token), userId: (res.body as Session).id }
 }

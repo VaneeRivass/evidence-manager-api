@@ -46,14 +46,15 @@ src/
 │   │             require-auth   the middleware that reads it
 │   │             express.d      declares req.user, the session
 │   ├── cases/    cases.routes · cases.controller · cases.service · cases.schema · cases.mapper
-│   └── files/    files.routes · files.controller · files.service · storage.port · r2-storage.adapter
+│   └── files/    files.routes · files.controller · files.service · files.schema
+│                 storage.port · r2-storage.adapter · in-memory-storage.adapter (the tests' double)
 ├── shared/       infrastructure any module uses, knowing nothing of the business
 │   ├── config/       env.ts — a Zod schema over process.env
 │   ├── database/     prisma.ts — single client instance
 │   ├── errors/       app-error · error-codes · error-handler (RFC 9457)
 │   ├── logging/      logger.ts — pino + pino-http, with redaction
 │   └── middleware/   load-owned-case · validate
-├── app.ts        builds and EXPORTS the app. Never calls listen()
+├── app.ts        createApp(storage) builds the app; `app` is it with R2, the one place storage is chosen. Never calls listen()
 └── server.ts     app.listen()        → local and Render
 
 api/index.ts      export default app  → Vercel

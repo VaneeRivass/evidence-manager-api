@@ -52,19 +52,56 @@ describe('createDownloadUrl', () => {
   it('signs a link that lives 60 seconds', async () => {
     const { url, expiresIn } = await storage.createDownloadUrl({
       key: 'users/u1/cases/c1/abc-report.pdf',
+      fileName: 'report.pdf',
     })
     expect(expiresIn).toBe(60)
     expect(new URL(url).searchParams.get('X-Amz-Expires')).toBe('60')
   })
 
-  // ADR-0004 · delivered as a download, so the file never opens in the browser
-  it('asks storage to serve the file as an attachment', async () => {
+  // ADR-0004 · RF-12 · saved, never opened in the browser, and under the
+  // file's name instead of its key
+  it('asks storage to serve the file as an attachment named after it', async () => {
     const { url } = await storage.createDownloadUrl({
       key: 'users/u1/cases/c1/abc-report.pdf',
+      fileName: 'report.pdf',
     })
     expect(new URL(url).searchParams.get('response-content-disposition')).toBe(
-      'attachment',
+      `attachment; filename="report.pdf"; filename*=UTF-8''report.pdf`,
     )
+  })
+
+  // RF-12 · RFC 6266: the plain form is ASCII with no quote to break out of;
+  // the encoded one keeps the real name
+  it('keeps a non-ASCII name in the encoded form only', async () => {
+    const { url } = await storage.createDownloadUrl({
+      key: 'users/u1/cases/c1/abc-x.pdf',
+      fileName: 'Evidencia "año" 2026.pdf',
+    })
+    expect(new URL(url).searchParams.get('response-content-disposition')).toBe(
+      `attachment; filename="Evidencia _a_o_ 2026.pdf"; filename*=UTF-8''Evidencia%20%22a%C3%B1o%22%202026.pdf`,
+    )
+  })
+
+  // RF-12 · RFC 6266 appendix D: some clients percent-decode the plain form
+  it('keeps no percent sign in the plain form', async () => {
+    const { url } = await storage.createDownloadUrl({
+      key: 'users/u1/cases/c1/abc-x.pdf',
+      fileName: 'Informe%20final.pdf',
+    })
+    expect(new URL(url).searchParams.get('response-content-disposition')).toBe(
+      `attachment; filename="Informe_20final.pdf"; filename*=UTF-8''Informe%2520final.pdf`,
+    )
+  })
+
+  // RF-12 · one character, one underscore, even past the 16-bit range
+  it('replaces an emoji with a single underscore in the plain form', async () => {
+    const { url } = await storage.createDownloadUrl({
+      key: 'users/u1/cases/c1/abc-x.png',
+      fileName: 'Foto 📷.png',
+    })
+    expect(
+      new URL(url).searchParams.get('response-content-disposition'),
+    ).toMatch(/^attachment; filename="Foto _\.png";/)
   })
 })
 
