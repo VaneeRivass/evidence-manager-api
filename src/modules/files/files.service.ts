@@ -49,7 +49,7 @@ const alreadyAttached = (caseId: string) =>
 // RF-11 · the case, live and already holding this file — or null. A double
 // click may have stored the file while this request was on its way: every
 // path that fails after the guard asks this before answering.
-const findCaseHolding = (
+const findCaseWithThisFile = (
   caseId: string,
   finalKey: string,
 ): Promise<Case | null> =>
@@ -128,7 +128,7 @@ export function createFilesService(storage: StoragePort): FilesService {
     pendingKey: string,
     finalKey: string,
   ): Promise<Case> {
-    const storedCase = await findCaseHolding(caseId, finalKey)
+    const storedCase = await findCaseWithThisFile(caseId, finalKey)
     if (storedCase) return storedCase
 
     await deleteFromStorage(finalKey, pendingKey)
@@ -151,7 +151,7 @@ export function createFilesService(storage: StoragePort): FilesService {
   ): Promise<Case> {
     let storedCase: Case | null
     try {
-      storedCase = await findCaseHolding(caseId, finalKey)
+      storedCase = await findCaseWithThisFile(caseId, finalKey)
     } catch (readError) {
       logger.warn(
         { err: readError, key: finalKey },
@@ -199,7 +199,7 @@ export function createFilesService(storage: StoragePort): FilesService {
 
       const uploaded = await storage.headObject(pendingKey)
       if (!uploaded) {
-        const storedCase = await findCaseHolding(ownedCase.id, finalKey)
+        const storedCase = await findCaseWithThisFile(ownedCase.id, finalKey)
         if (storedCase) return storedCase
         throw BadRequest(
           ErrorCode.FILE_NOT_UPLOADED,
@@ -212,7 +212,7 @@ export function createFilesService(storage: StoragePort): FilesService {
       try {
         await storage.copyObject({ from: pendingKey, to: finalKey })
       } catch (error) {
-        const storedCase = await findCaseHolding(ownedCase.id, finalKey)
+        const storedCase = await findCaseWithThisFile(ownedCase.id, finalKey)
         if (storedCase) return storedCase
         throw error
       }
