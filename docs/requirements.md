@@ -193,7 +193,7 @@ router.patch('/:id',
   requireAuth,                 // 1. cryptography. No database
   validateParams(idSchema),    // 2. is :id a UUID?     → 400
   validate(updateCaseSchema),  // 3. read the body, is it valid? → 400 / 413
-  loadOwnedCase,               // 4. NOW the query      → 404 / 403
+  requireOwnedCase,            // 4. NOW the query      → 404 / 403
   update,                      // 5. the work
 )
 ```

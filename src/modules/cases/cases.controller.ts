@@ -1,5 +1,5 @@
 import type { Request, Response } from 'express'
-import type { OwnedCaseResponse } from '../../shared/middleware/load-owned-case.js'
+import type { OwnedCaseResponse } from '../../shared/middleware/require-owned-case.js'
 import { sessionOf } from '../auth/require-auth.js'
 import type { StoragePort } from '../files/storage.port.js'
 import { toPublicCase } from './cases.mapper.js'
@@ -34,7 +34,7 @@ export async function list(
   res.status(200).json({ items: items.map(toPublicCase), total })
 }
 
-// RF-07 · loadOwnedCase already found it and checked the owner.
+// RF-07 · requireOwnedCase already found it and checked the owner.
 export function read(_req: Request, res: OwnedCaseResponse): void {
   res.status(200).json(toPublicCase(res.locals.case))
 }

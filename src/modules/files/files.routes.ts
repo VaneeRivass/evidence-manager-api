@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import { requireAuth } from '../auth/require-auth.js'
 import { caseParams } from '../cases/cases.schema.js'
-import { loadOwnedCase } from '../../shared/middleware/load-owned-case.js'
+import { requireOwnedCase } from '../../shared/middleware/require-owned-case.js'
 import { validate, validateParams } from '../../shared/middleware/validate.js'
 import {
   completeUpload,
@@ -23,7 +23,7 @@ export function createFilesRouter(storage: StoragePort): Router {
     requireAuth,
     validateParams(caseParams),
     validate(requestUploadSchema),
-    loadOwnedCase,
+    requireOwnedCase,
     requestUploadUrl(files),
   )
   router.post(
@@ -31,14 +31,14 @@ export function createFilesRouter(storage: StoragePort): Router {
     requireAuth,
     validateParams(caseParams),
     validate(completeUploadSchema),
-    loadOwnedCase,
+    requireOwnedCase,
     completeUpload(files),
   )
   router.get(
     '/:id/file/download-url',
     requireAuth,
     validateParams(caseParams),
-    loadOwnedCase,
+    requireOwnedCase,
     requestDownloadUrl(files),
   )
 

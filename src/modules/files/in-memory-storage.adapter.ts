@@ -19,13 +19,13 @@ export function createInMemoryStorage(): InMemoryStorage {
       objects.set(key, metadata)
     },
 
-    createUploadUrl: ({ key, contentType }) =>
+    signUploadUrl: ({ key, contentType }) =>
       Promise.resolve({
         url: `memory://upload/${key}?contentType=${contentType}`,
         expiresIn: UPLOAD_URL_TTL_SECONDS,
       }),
 
-    createDownloadUrl: ({ key, fileName }) =>
+    signDownloadUrl: ({ key, fileName }) =>
       Promise.resolve({
         url: `memory://download/${key}?fileName=${fileName}`,
         expiresIn: DOWNLOAD_URL_TTL_SECONDS,

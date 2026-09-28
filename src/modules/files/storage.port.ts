@@ -13,17 +13,14 @@ export interface SignedUrl {
 
 export interface StoragePort {
   // The content type is part of the signature: a PUT with another type fails.
-  createUploadUrl(params: {
+  signUploadUrl(params: {
     key: string
     contentType: string
   }): Promise<SignedUrl>
 
   // Served as an attachment under fileName, so the file is saved, never
   // opened in the browser, and not named after its key.
-  createDownloadUrl(params: {
-    key: string
-    fileName: string
-  }): Promise<SignedUrl>
+  signDownloadUrl(params: { key: string; fileName: string }): Promise<SignedUrl>
 
   // Null when nothing was uploaded, so "missing" is not confused with 0 bytes.
   headObject(key: string): Promise<ObjectMetadata | null>

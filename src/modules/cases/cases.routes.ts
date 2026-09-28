@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import { requireAuth } from '../auth/require-auth.js'
 import type { StoragePort } from '../files/storage.port.js'
-import { loadOwnedCase } from '../../shared/middleware/load-owned-case.js'
+import { requireOwnedCase } from '../../shared/middleware/require-owned-case.js'
 import {
   validate,
   validateParams,
@@ -29,7 +29,7 @@ export function createCasesRouter(storage: StoragePort): Router {
     '/:id',
     requireAuth,
     validateParams(caseParams),
-    loadOwnedCase,
+    requireOwnedCase,
     read,
   )
   router.patch(
@@ -37,14 +37,14 @@ export function createCasesRouter(storage: StoragePort): Router {
     requireAuth,
     validateParams(caseParams),
     validate(updateCaseSchema),
-    loadOwnedCase,
+    requireOwnedCase,
     update,
   )
   router.delete(
     '/:id',
     requireAuth,
     validateParams(caseParams),
-    loadOwnedCase,
+    requireOwnedCase,
     remove(storage),
   )
 

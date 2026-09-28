@@ -317,7 +317,7 @@ describe('GET /cases', () => {
 })
 
 // RF-09b · the three ways into one case: every guard test runs against each,
-// so a route mounted without loadOwnedCase fails here.
+// so a route mounted without requireOwnedCase fails here.
 describe.each([
   { route: 'GET', send: readCase },
   {

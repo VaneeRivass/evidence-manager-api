@@ -16,7 +16,7 @@ export const caseNotFound = (): AppError =>
 // RF-07 · RF-09b · the one place a /cases/:id route finds its case, so the
 // check cannot be forgotten in one of them. Missing or deleted is a 404;
 // someone else's, a 403.
-export async function loadOwnedCase(
+export async function requireOwnedCase(
   req: Request<{ id: string }>,
   res: OwnedCaseResponse,
   next: NextFunction,
