@@ -441,18 +441,21 @@ describe('POST /cases/:id/file/complete', () => {
       what: 'a real type not allowed',
       uploaded: { ...PDF, contentType: 'application/x-msdownload' },
     },
-  ])('destroys the object and refuses it for $what', async ({ uploaded }) => {
-    const user = await signIn(server)
-    const caseId = await createCase(user)
-    const key = await uploadFile(user, caseId, uploaded)
+  ])(
+    'deletes the object from storage and refuses it for $what',
+    async ({ uploaded }) => {
+      const user = await signIn(server)
+      const caseId = await createCase(user)
+      const key = await uploadFile(user, caseId, uploaded)
 
-    const res = await confirmUpload(user, caseId, { key })
+      const res = await confirmUpload(user, caseId, { key })
 
-    expect(res.status).toBe(400)
-    expect(res.body).toMatchObject({ code: 'FILE_REJECTED' })
-    expect(await storage.headObject(key)).toBeNull()
-    expect(await storage.headObject(expectedFinalKey(key))).toBeNull()
-  })
+      expect(res.status).toBe(400)
+      expect(res.body).toMatchObject({ code: 'FILE_REJECTED' })
+      expect(await storage.headObject(key)).toBeNull()
+      expect(await storage.headObject(expectedFinalKey(key))).toBeNull()
+    },
+  )
 
   // RF-11 · the type storage reports is the one signed, as the client sent it
   it('accepts a real type in any case and stores it in lowercase', async () => {
@@ -487,7 +490,7 @@ describe('POST /cases/:id/file/complete', () => {
 
   // RF-11 · two links asked before either was confirmed: the first wins, the
   // second is not left behind
-  it('refuses and destroys a second file once one is stored', async () => {
+  it('refuses a second file once one is stored, and deletes it from storage', async () => {
     const user = await signIn(server)
     const caseId = await createCase(user)
     const first = await uploadFile(user, caseId)
@@ -646,7 +649,7 @@ describe.each([
 describe('a case that changes between the check and the write', () => {
   const files = createFilesService(storage)
 
-  it('answers 404 and destroys the copy when the case was deleted', async () => {
+  it('answers 404 and deletes the copy from storage when the case was deleted', async () => {
     const { caseId, key, stale, upload } = await uploadedAndStale()
     await markDeleted(caseId)
 
@@ -657,7 +660,7 @@ describe('a case that changes between the check and the write', () => {
     expect(await storage.headObject(expectedFinalKey(key))).toBeNull()
   })
 
-  it('answers 409 and destroys the copy when another file was stored', async () => {
+  it('answers 409 and deletes the copy from storage when another file was stored', async () => {
     const { caseId, key, stale, upload } = await uploadedAndStale()
     await attachFile(caseId, 'users/u/cases/c/other.pdf')
 
@@ -707,8 +710,8 @@ describe('a case that changes between the check and the write', () => {
     })
   })
 
-  // Storage failing to destroy must not hide what happened to the case
-  it('still answers 404 when destroying the copy fails', async () => {
+  // Storage failing to delete must not hide what happened to the case
+  it('still answers 404 when deleting the copy fails', async () => {
     const { caseId, stale, upload } = await uploadedAndStale()
     await markDeleted(caseId)
     const deleteFails = createFilesService({
@@ -732,7 +735,7 @@ describe('a write that fails after the copy', () => {
   const files = createFilesService(storage)
   afterEach(() => vi.restoreAllMocks())
 
-  it('destroys the copy when the case does not hold it', async () => {
+  it('deletes the copy from storage when the case does not hold it', async () => {
     const { key, stale, upload } = await uploadedAndStale()
     vi.spyOn(prisma.case, 'update').mockRejectedValueOnce(
       new Error('connection timeout'),

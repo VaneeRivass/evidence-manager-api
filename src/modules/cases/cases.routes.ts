@@ -16,7 +16,7 @@ import {
 } from './cases.schema.js'
 
 // Receives the storage like createFilesRouter, for the one route that needs
-// it: deleting a case destroys its file.
+// it: deleting a case deletes its file from storage.
 export function createCasesRouter(storage: StoragePort): Router {
   const router = Router()
 

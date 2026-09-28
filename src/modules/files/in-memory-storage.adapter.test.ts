@@ -65,7 +65,7 @@ describe('createInMemoryStorage', () => {
     await expect(storage.headObject('pending/u1/x.pdf')).resolves.toBeNull()
   })
 
-  // ADR-0005 · destroying an object that no longer exists does not fail — that is what makes retrying safe
+  // ADR-0005 · deleting an object that no longer exists does not fail — that is what makes retrying safe
   it('deleteObject on a key that was never uploaded does not throw', async () => {
     const storage = createInMemoryStorage()
     await expect(

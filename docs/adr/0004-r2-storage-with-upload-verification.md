@@ -30,11 +30,11 @@ storage what is actually there, with `HeadObject`:
 | Its real type | Something other than what was validated ends up stored |
 | The key belongs to that case and user | Someone could attach an object that is not theirs |
 
-If size or type do not match, the object **is destroyed** before the request is rejected:
+If size or type do not match, the object **is deleted** before the request is rejected:
 otherwise it would sit there consuming space with no case claiming it.
 
 The signature also points at a temporary area, `pending/`. Confirmation moves the object to
-its final location, and a bucket lifecycle rule destroys anything left unconfirmed for
+its final location, and a bucket lifecycle rule deletes anything left unconfirmed for
 twenty-four hours. So someone who uploads a file and closes the tab leaves no permanent
 orphan, and no cleanup process is needed — which a deployment without permanent servers
 could not host anyway.

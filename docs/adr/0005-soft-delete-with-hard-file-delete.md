@@ -1,4 +1,4 @@
-# ADR-0005 · Soft delete for the record, real destruction of the file
+# ADR-0005 · Soft delete for the record, real deletion of the file
 
 **Status:** accepted · **Date:** 2026-09-22
 
@@ -17,18 +17,18 @@ with no shared transaction**. Either can fail on its own.
 ## Decision
 
 Deleting a case sets its `deletedAt` column instead of removing the row, and **the object
-is genuinely destroyed**.
+is genuinely deleted from storage**.
 
 The order is not arbitrary:
 
 ```
-1. Destroy the object in storage
+1. Delete the object from storage
 2. If it fails → return an error without touching the database. The user retries
 3. If it succeeds → set deletedAt and clear the file reference
 ```
 
 The other way round would lose the object's key before deleting it, and the orphan would be
-permanent. In this order, a failure halfway is fixed by retrying, because **destroying an
+permanent. In this order, a failure halfway is fixed by retrying, because **deleting an
 object that no longer exists does not produce an error**.
 
 From outside the API the behaviour is indistinguishable from a hard delete: the response is
@@ -66,5 +66,5 @@ concentrating every case query in one service file and in the middleware that lo
 case, which every `/cases/:id` route passes through.
 
 **What is not preserved.** Traceability reaches the metadata. The file's content is
-destroyed, and without a change log there is no record of the status transitions that
+deleted from storage, and without a change log there is no record of the status transitions that
 preceded the deletion either.

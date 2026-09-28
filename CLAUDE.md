@@ -128,18 +128,18 @@ controller: copied five times it gets forgotten once, and that is the vulnerabil
 **Every case query filters `deletedAt: null`.** Forgetting it in a single route leaks
 deleted records, silently.
 
-**Delete: destroy the object in storage FIRST, then touch the database.** If storage fails,
+**Deleting a case: remove its object from storage FIRST, then touch the database.** If storage fails,
 the database is untouched and the user retries — deleting an object that no longer exists
 does not fail. The reverse order loses the key before the object, and the orphan is
 permanent.
 
 **`POST /cases/:id/file/complete` verifies with `HeadObject`:** the object exists, its real
 size is within the limit, its real type matches what was signed, and the key belongs to
-that case and user. If size or type do not match, **destroy the object** before rejecting.
+that case and user. If size or type do not match, **delete the object** before rejecting.
 A presigned `PUT` signs the address, the method and the content type — **not the byte
 count**.
 
-**Uploads land in `pending/` and move on confirmation.** A bucket lifecycle rule destroys
+**Uploads land in `pending/` and move on confirmation.** A bucket lifecycle rule deletes
 anything left there for 24 hours, so an abandoned upload never becomes a permanent orphan.
 There is no cleanup process: serverless has no background jobs.
 

@@ -8,10 +8,14 @@ import type { CompleteUploadInput, RequestUploadInput } from './files.schema.js'
 import { isAllowedContentType } from './files.service.js'
 import { type ResolvedUpload, resolveUploadKey } from './storage-key.js'
 
-// What checkUploadKey leaves for the handler, beside the case the guard leaves.
+// What checkUploadKey adds to res.locals: the key, resolved.
+type UploadLocals = { upload: ResolvedUpload }
+
+// What the handler finds after both steps: the resolved key from
+// checkUploadKey, and the case requireOwnedCase adds after it.
 export type ResolvedUploadResponse = Response<
   unknown,
-  { case: Case; upload: ResolvedUpload }
+  UploadLocals & { case: Case }
 >
 
 // Two checks that need no database, so they run before requireOwnedCase
@@ -51,7 +55,7 @@ export function checkDeclaredFile(
 // both known before any query. Resolved here once, and left for the service.
 export function checkUploadKey(
   req: Request<{ id: string }, unknown, CompleteUploadInput>,
-  res: ResolvedUploadResponse,
+  res: Response<unknown, UploadLocals>,
   next: NextFunction,
 ): void {
   const { key } = req.body
