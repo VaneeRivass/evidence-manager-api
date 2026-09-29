@@ -1,15 +1,13 @@
 import type { Case } from '../../generated/prisma/client.js'
-import { env } from '../../shared/config/env.js'
-import {
-  type AppError,
-  BadRequest,
-  caseNotFound,
-  Conflict,
-} from '../../shared/errors/app-error.js'
+import { BadRequest, caseNotFound } from '../../shared/errors/app-error.js'
 import { ErrorCode } from '../../shared/errors/error-codes.js'
 import { isMissingRow, prisma } from '../../shared/database/prisma.js'
 import { logger } from '../../shared/logging/logger.js'
-import { isAllowedContentType } from './files.schema.js'
+import {
+  alreadyAttached,
+  isAllowedContentType,
+  isAllowedSize,
+} from './files.policy.js'
 import type { ResolvedUpload } from './file-path.js'
 import type {
   ObjectMetadata,
@@ -25,13 +23,7 @@ export type ConfirmUpload = (
   upload: ResolvedUpload,
 ) => Promise<Case>
 
-// RF-10 · RF-11 · evidence is attached once and never replaced.
-export const alreadyAttached = (caseId: string): AppError =>
-  Conflict(ErrorCode.FILE_ALREADY_ATTACHED, `Case ${caseId} already has a file`)
-
-// RF-11 · the case, live and already holding this file — or null. A double
-// click may have stored the file while this request was on its way: every
-// path that fails after the guard asks this before answering.
+// RF-11 · the case, live and already holding this file — or null.
 const findCaseWithThisFile = (
   caseId: string,
   finalKey: string,
@@ -39,6 +31,28 @@ const findCaseWithThisFile = (
   prisma.case.findFirst({
     where: { id: caseId, deletedAt: null, fileKey: finalKey },
   })
+
+// RF-11 · a double click may have stored this file while this request was on
+// its way: if the case already holds it, that is success; if not, the failure
+// stands. A database error while checking never replaces the failure that
+// brought us here, which is the one worth reporting.
+async function returnIfAlreadyStored(
+  caseId: string,
+  finalKey: string,
+  failure: unknown,
+): Promise<Case> {
+  const storedCase = await findCaseWithThisFile(caseId, finalKey).catch(
+    (readError: unknown) => {
+      logger.warn(
+        { err: readError, key: finalKey },
+        'Double-click check failed',
+      )
+      return null
+    },
+  )
+  if (storedCase) return storedCase
+  throw failure
+}
 
 // ADR-0006 · the storage is handed in, never imported.
 export function createConfirmUploadService(
@@ -64,11 +78,7 @@ export function createConfirmUploadService(
     pendingKey: string,
     { size, contentType }: ObjectMetadata,
   ): Promise<void> {
-    const allowed =
-      size >= 1 &&
-      size <= env.MAX_FILE_SIZE_BYTES &&
-      isAllowedContentType(contentType)
-    if (allowed) return
+    if (isAllowedSize(size) && isAllowedContentType(contentType)) return
 
     await deleteFromStorage(pendingKey)
     throw BadRequest(
@@ -105,48 +115,44 @@ export function createConfirmUploadService(
     }
   }
 
-  // RF-11 · the write found no row: after the guard read the case, it was
-  // deleted, or a file was stored. This same file, stored by another click,
-  // is success; anything else leaves the copy with no owner, so it goes.
+  // RF-11 · the write found no row, so the database has answered: it did not
+  // save, because after the guard read the case it was deleted or given a
+  // file. This same file, stored by another click, is success; anything else
+  // leaves the copy with no owner, so it goes.
   async function recoverIfCaseChanged(
     caseId: string,
     pendingKey: string,
     finalKey: string,
   ): Promise<Case> {
-    const storedCase = await findCaseWithThisFile(caseId, finalKey)
-    if (storedCase) return storedCase
-
-    await deleteFromStorage(finalKey, pendingKey)
     const latestCase = await prisma.case.findFirst({
       where: { id: caseId, deletedAt: null },
     })
-    if (!latestCase) throw caseNotFound()
-    throw alreadyAttached(caseId)
+    if (latestCase?.fileKey === finalKey) return latestCase
+
+    await deleteFromStorage(finalKey, pendingKey)
+    throw latestCase ? alreadyAttached(caseId) : caseNotFound()
   }
 
-  // RF-11 · the write failed for another reason (a timeout), and may have
-  // landed before the answer was lost. Holding the file, the case is the
-  // answer. Not holding it, the copy would be an orphan outside pending/, so
-  // it goes. If the case cannot even be read, the copy stays: deleting a file
-  // the case holds would be worse than leaving an orphan.
+  // RF-11 · the write failed for any other reason — a lost connection, a
+  // timeout, a bug. The database may still commit it after we look, so the
+  // case not holding the file yet proves nothing: the copy is kept and its
+  // path logged. A spare file costs little; a case pointing at a deleted file
+  // loses its evidence. Confirming again heals it: the original is still in
+  // pending/, so the same copy is made and saved.
   async function recoverIfWriteFailed(
     caseId: string,
     finalKey: string,
     failure: unknown,
   ): Promise<Case> {
-    let storedCase: Case | null
-    try {
-      storedCase = await findCaseWithThisFile(caseId, finalKey)
-    } catch (readError) {
-      logger.warn(
-        { err: readError, key: finalKey },
-        'Copy kept: case unreadable',
-      )
-      throw failure
-    }
-
+    const storedCase = await findCaseWithThisFile(caseId, finalKey).catch(
+      () => null,
+    )
     if (storedCase) return storedCase
-    await deleteFromStorage(finalKey)
+
+    logger.warn(
+      { err: failure, key: finalKey },
+      'Copy kept: the write may land',
+    )
     throw failure
   }
 
@@ -166,12 +172,11 @@ export function createConfirmUploadService(
 
     const uploaded = await storage.headObject(pendingKey)
     if (!uploaded) {
-      const storedCase = await findCaseWithThisFile(ownedCase.id, finalKey)
-      if (storedCase) return storedCase
-      throw BadRequest(
+      const notUploaded = BadRequest(
         ErrorCode.FILE_NOT_UPLOADED,
         `No object at ${pendingKey}`,
       )
+      return returnIfAlreadyStored(ownedCase.id, finalKey, notUploaded)
     }
     await rejectUnlessSizeAndTypeAllowed(pendingKey, uploaded)
 
@@ -179,9 +184,7 @@ export function createConfirmUploadService(
     try {
       await storage.copyObject({ from: pendingKey, to: finalKey })
     } catch (error) {
-      const storedCase = await findCaseWithThisFile(ownedCase.id, finalKey)
-      if (storedCase) return storedCase
-      throw error
+      return returnIfAlreadyStored(ownedCase.id, finalKey, error)
     }
 
     const storedCase = await saveFileReference(ownedCase.id, upload, uploaded)

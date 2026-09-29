@@ -265,6 +265,24 @@ describe('POST /cases/:id/file/upload-url', () => {
     expect(res.body).toMatchObject({ code: 'FILE_TYPE_NOT_ALLOWED' })
   })
 
+  // RF-10 · a MIME type is ASCII. Lowercasing a non-ASCII one can turn it into
+  // an allowed type (the Kelvin sign K becomes k), which then fails to sign
+  it('refuses a type with a non-ASCII character', async () => {
+    const user = await signIn(server)
+    const caseId = await createCase(user)
+
+    const res = await requestUploadUrl(user, caseId, {
+      ...VALID_UPLOAD,
+      contentType: 'application/pd\u212Af',
+    })
+
+    expect(res.status).toBe(400)
+    expect(res.body).toMatchObject({
+      code: 'VALIDATION_ERROR',
+      errors: [{ field: 'contentType', code: 'INVALID_FORMAT' }],
+    })
+  })
+
   // RF-10 · a broken character (half of a pair) would make the storage
   // library throw while signing; sanitising drops it like a control character
   it('drops a lone surrogate from the name instead of failing', async () => {
@@ -710,6 +728,24 @@ describe('a case that changes between the check and the write', () => {
     })
   })
 
+  // Two failures at once: the storage error is the real cause, and a database
+  // hiccup while checking for a double click must not replace it
+  it('reports the storage error when the double-click check also fails', async () => {
+    const { stale, upload } = await uploadedAndStale()
+    const copyFails = createFilesService({
+      ...storage,
+      copyObject: () => Promise.reject(new Error('R2 copy failed')),
+    })
+    const read = vi
+      .spyOn(prisma.case, 'findFirst')
+      .mockRejectedValueOnce(new Error('database unreachable'))
+
+    await expect(copyFails.completeUpload(stale, upload)).rejects.toThrow(
+      'R2 copy failed',
+    )
+    read.mockRestore()
+  })
+
   // Storage failing to delete must not hide what happened to the case
   it('still answers 404 when deleting the copy fails', async () => {
     const { caseId, stale, upload } = await uploadedAndStale()
@@ -735,16 +771,33 @@ describe('a write that fails after the copy', () => {
   const files = createFilesService(storage)
   afterEach(() => vi.restoreAllMocks())
 
-  it('deletes the copy from storage when the case does not hold it', async () => {
+  // The database may still commit the write after the case is read, so the
+  // copy is kept: a spare file, never a case pointing at a deleted one
+  it('keeps the copy when the case does not hold it yet', async () => {
     const { key, stale, upload } = await uploadedAndStale()
     vi.spyOn(prisma.case, 'update').mockRejectedValueOnce(
-      new Error('connection timeout'),
+      new Error('connection lost'),
     )
 
     await expect(files.completeUpload(stale, upload)).rejects.toThrow(
-      'connection timeout',
+      'connection lost',
     )
-    expect(await storage.headObject(expectedFinalKey(key))).toBeNull()
+    expect(await storage.headObject(expectedFinalKey(key))).toEqual(PDF)
+  })
+
+  // The original is still in pending/, so a second confirmation copies it to
+  // the same path and saves it: the spare copy becomes the case's file
+  it('heals when the user confirms again', async () => {
+    const { key, stale, upload } = await uploadedAndStale()
+    vi.spyOn(prisma.case, 'update').mockRejectedValueOnce(
+      new Error('connection lost'),
+    )
+    await files.completeUpload(stale, upload).catch(() => undefined)
+
+    await expect(files.completeUpload(stale, upload)).resolves.toMatchObject({
+      fileKey: expectedFinalKey(key),
+    })
+    expect(await storage.headObject(expectedFinalKey(key))).toEqual(PDF)
   })
 
   // The write landed and only the answer was lost: the copy is the case's file

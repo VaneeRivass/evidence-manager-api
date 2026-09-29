@@ -4,11 +4,8 @@ import { env } from '../../shared/config/env.js'
 import { BadRequest } from '../../shared/errors/app-error.js'
 import { ErrorCode } from '../../shared/errors/error-codes.js'
 import { sessionOf } from '../auth/require-auth.middleware.js'
-import {
-  type CompleteUploadInput,
-  isAllowedContentType,
-  type RequestUploadInput,
-} from './files.schema.js'
+import { isAllowedContentType, isAllowedSize } from './files.policy.js'
+import type { CompleteUploadInput, RequestUploadInput } from './files.schema.js'
 import { type ResolvedUpload, resolveUploadKey } from './file-path.js'
 
 // What checkUploadKey adds to res.locals: the key, resolved.
@@ -43,7 +40,7 @@ export function checkDeclaredFile(
     )
   }
 
-  if (declaredSize > env.MAX_FILE_SIZE_BYTES) {
+  if (!isAllowedSize(declaredSize)) {
     throw BadRequest(
       ErrorCode.FILE_TOO_LARGE,
       `Declared size ${declaredSize} is over the limit`,

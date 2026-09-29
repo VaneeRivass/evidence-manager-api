@@ -17,11 +17,18 @@ export const notFoundHandler: RequestHandler = (req) => {
 // An error that is not an AppError is a bug, and nothing about it is revealed.
 // No `type`: RFC 9457 reads it as about:blank, and `code` narrows it.
 // See docs/requirements.md RF-21 to RF-23 and RNF-07.
-export const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
+export const errorHandler: ErrorRequestHandler = (err, req, res, next) => {
   const error = err instanceof Error ? err : new Error(String(err))
 
   // pino-http writes it on the request's completion line, next to its reqId.
   res.err = error
+
+  // The response has already started: a second answer cannot be written.
+  // Express's own handler closes the connection (its documented guidance).
+  if (res.headersSent) {
+    next(err)
+    return
+  }
 
   const { status, code, params } =
     error instanceof AppError
