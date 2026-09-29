@@ -116,25 +116,40 @@ async function markCaseDeleted(ownedCase: Case): Promise<Case | null> {
   }
 }
 
-// RF-09 · RNF-05 · the row stays as the trail; only the key is cleared. The
-// file is deleted from storage FIRST (ADR-0005): if storage fails, the error
-// reaches the client and the case is untouched, so deleting again is safe.
+// RF-09 · deletes the case's file from storage FIRST (ADR-0005), then marks
+// the case: if storage fails, the error reaches the client and the case is
+// untouched, so deleting again is safe. Null if the case changed meanwhile.
+async function deleteFileThenMark(
+  item: Case,
+  storage: StoragePort,
+): Promise<Case | null> {
+  if (item.fileKey !== null) await storage.deleteObject(item.fileKey)
+  return markCaseDeleted(item)
+}
+
+// RF-09 · RNF-05 · the row stays as the trail; only the key is cleared.
 // Storage cannot run locally, so it is received, not imported (ADR-0006).
 export async function deleteCase(
   ownedCase: Case,
   storage: StoragePort,
 ): Promise<Case> {
-  if (ownedCase.fileKey !== null) await storage.deleteObject(ownedCase.fileKey)
-
-  const deleted = await markCaseDeleted(ownedCase)
+  // First attempt: the case as the guard read it.
+  const deleted = await deleteFileThenMark(ownedCase, storage)
   if (deleted) return deleted
 
-  // The case changed after the guard read it: deleted by another request, or
-  // given a file by a confirmation. Deleted again with what it holds now. A
-  // file is never replaced, so this happens at most once.
+  // It changed meanwhile: deleted by another request, or given a file by a
+  // confirmation. Second and last attempt, with the case as it is now. A case
+  // gains a file at most once (evidence is never replaced), so it cannot have
+  // changed again.
   const latestCase = await prisma.case.findFirst({
     where: { id: ownedCase.id, deletedAt: null },
   })
   if (!latestCase) throw caseNotFound()
-  return deleteCase(latestCase, storage)
+  const deletedNow = await deleteFileThenMark(latestCase, storage)
+  if (deletedNow) return deletedNow
+
+  // Unreachable while evidence is never replaced; if that rule ever changes,
+  // this fails loudly instead of retrying without end. Not tested: it cannot
+  // be reached through the API.
+  throw new Error(`Case ${ownedCase.id} changed twice while being deleted`)
 }
