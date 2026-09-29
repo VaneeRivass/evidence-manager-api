@@ -52,6 +52,7 @@ src/
 │                 confirm-upload.service   confirm an upload (RF-11), and everything that can go wrong
 │                 check-upload.middleware  checkDeclaredFile, checkUploadKey: before the case is queried
 │                 file-path                where a file sits in storage: built for an upload, resolved on confirmation
+│                 files.policy             which files are accepted: allowed type and size, one file per case
 ├── shared/       infrastructure any module uses, knowing nothing of the business
 │   ├── config/       env.ts — a Zod schema over process.env
 │   ├── database/     prisma.ts — single client instance
@@ -142,7 +143,7 @@ does not fail. The reverse order loses the key before the object, and the orphan
 permanent.
 
 **`POST /cases/:id/file/complete` verifies with `HeadObject`:** the object exists, its real
-size is within the limit, its real type matches what was signed, and the key belongs to
+size is within the limit, its real type is in the allowlist, and the key belongs to
 that case and user. If size or type do not match, **delete the object** before rejecting.
 A presigned `PUT` signs the address, the method and the content type — **not the byte
 count**.

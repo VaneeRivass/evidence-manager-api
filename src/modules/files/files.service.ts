@@ -2,7 +2,6 @@ import type { Case } from '../../generated/prisma/client.js'
 import { NotFound } from '../../shared/errors/app-error.js'
 import { ErrorCode } from '../../shared/errors/error-codes.js'
 import {
-  alreadyAttached,
   type ConfirmUpload,
   createConfirmUploadService,
 } from './confirm-upload.service.js'
@@ -10,6 +9,7 @@ import {
   DOWNLOAD_URL_TTL_SECONDS,
   UPLOAD_URL_TTL_SECONDS,
 } from './files.constants.js'
+import { alreadyAttached } from './files.policy.js'
 import type { RequestUploadInput } from './files.schema.js'
 import { buildPendingKey } from './file-path.js'
 import type { StoragePort } from '../../shared/storage/storage.port.js'

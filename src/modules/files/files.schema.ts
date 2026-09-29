@@ -1,5 +1,4 @@
 import * as z from 'zod'
-import { env } from '../../shared/config/env.js'
 import { MAX_FILE_NAME_BYTES } from './files.constants.js'
 import { fitsNameLimit, sanitiseFileName } from './file-path.js'
 
@@ -29,8 +28,10 @@ const fileName = z.string().superRefine((value, ctx) => {
 export const requestUploadSchema = z.object({
   fileName,
   // Signed as sent, so the PUT repeats the header the client already has;
-  // compared with the allowlist in lowercase by the service.
-  contentType: z.string(),
+  // whether it is allowed is files.policy.ts's to say. ASCII only, as every
+  // MIME type is: lowercasing a non-ASCII one can turn it into an allowed type
+  // (the Kelvin sign K becomes k) that storage then fails to sign.
+  contentType: z.string().regex(/^[\x20-\x7e]+$/),
   // In bytes. An empty file is no evidence.
   size: z.number().int().min(1),
 })
@@ -41,8 +42,3 @@ export type RequestUploadInput = z.infer<typeof requestUploadSchema>
 export const completeUploadSchema = z.object({ key: z.string() })
 
 export type CompleteUploadInput = z.infer<typeof completeUploadSchema>
-
-// RF-10 · RF-11 · MIME types ignore case. Checked on the declared type before
-// the case is queried, and again on the real type storage reports.
-export const isAllowedContentType = (contentType: string): boolean =>
-  env.ALLOWED_MIME_TYPES.includes(contentType.toLowerCase())

@@ -1,6 +1,6 @@
-import express from 'express'
+import express, { type Request, type Response } from 'express'
 import request from 'supertest'
-import { afterAll, describe, expect, it } from 'vitest'
+import { afterAll, describe, expect, it, vi } from 'vitest'
 import { app } from '../../app.js'
 import { listen, problemOf } from '../../../tests/helpers.js'
 import { httpLogger } from '../logging/logger.js'
@@ -8,7 +8,8 @@ import { PayloadTooLarge } from './app-error.js'
 import { ErrorCode } from './error-codes.js'
 import { errorHandler } from './error-handler.middleware.js'
 
-// No route throws these yet, so a minimal app with the real middlewares does.
+// A throwaway app with the real middlewares: a route that throws a bug, and one
+// that throws an error with params, without depending on what real routes do.
 const testApp = express()
 testApp.use(httpLogger)
 testApp.get('/bug', () => {
@@ -88,5 +89,21 @@ describe('error handler', () => {
       .set('X-Request-Id', 'planted')
 
     expect(problemOf(res).requestId).not.toBe('planted')
+  })
+})
+
+// Express's own guidance: once the response has started, a second answer
+// cannot be written — the error goes to Express, which closes the connection.
+describe('an error after the response has started', () => {
+  it('hands the error to Express instead of answering again', () => {
+    const error = new Error('stream broke mid-response')
+    const status = vi.fn()
+    const next = vi.fn()
+    const res = { headersSent: true, status } as unknown as Response
+
+    errorHandler(error, {} as Request, res, next)
+
+    expect(next).toHaveBeenCalledWith(error)
+    expect(status).not.toHaveBeenCalled()
   })
 })
