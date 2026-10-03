@@ -13,8 +13,8 @@ import {
 
 // Exercises the real app: authRouter, its middlewares and app.ts wired
 // together, not a stand-in router. Only what never reaches the database:
-// /auth/me and /auth/logout need a signed token alone (RF-03, RF-04), and an
-// invalid body is refused before any query.
+// /auth/me needs a signed token alone (RF-03), /auth/logout not even that
+// (RF-04), and an invalid body is refused before any query.
 const server = await listen(app)
 afterAll(() => server.close())
 
@@ -86,13 +86,23 @@ describe('GET /auth/me', () => {
   it.each([
     ['a tampered token', tamperedToken],
     ['an expired token', expiredToken],
-  ])('answers 401 with %s', async (_case, tokenFor) => {
+  ])('answers 401 and clears the cookie with %s', async (_case, tokenFor) => {
     const res = await request(server)
       .get('/auth/me')
       .set('Cookie', withSession(await tokenFor()))
 
     expect(res.status).toBe(401)
     expect(res.body).toMatchObject({ code: 'UNAUTHENTICATED' })
+    // RF-03 · the rejected cookie goes with the 401, with the attributes a
+    // browser honours: the error handler must not drop the header
+    expect(sessionCookieOf(res)).toMatchObject({
+      value: '',
+      expires: new Date(0),
+      path: '/',
+      httpOnly: true,
+      secure: true,
+      sameSite: 'lax',
+    })
   })
 })
 
@@ -118,12 +128,21 @@ describe('POST /auth/logout', () => {
     })
   })
 
+  // RF-04 · signing out does not depend on the session being valid
+  it('answers 204 and clears an expired cookie', async () => {
+    const res = await request(server)
+      .post('/auth/logout')
+      .set('Cookie', withSession(await expiredToken()))
+
+    expect(res.status).toBe(204)
+    expect(sessionCookieOf(res)).toMatchObject({ value: '' })
+  })
+
   // RF-04
-  it('answers 401 without a session cookie', async () => {
+  it('answers 204 without a session cookie', async () => {
     const res = await request(server).post('/auth/logout')
 
-    expect(res.status).toBe(401)
-    expect(res.body).toMatchObject({ code: 'UNAUTHENTICATED' })
+    expect(res.status).toBe(204)
   })
 
   // RF-04 · the known limitation "The token cannot be revoked", pinned down:

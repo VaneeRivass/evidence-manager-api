@@ -21,8 +21,8 @@ every requirement is defined in exactly one file.
 | **RF-01b** | The password is **8 to 64 characters**, each Unicode code point counting as one, as NIST SP 800-63B counts them, and counted and hashed on the **NFC form**, so the same password typed composed or built from a base and a mark is one text. Bytes are not counted: `ñññññññ` is 7 characters and too short although it takes 14 bytes, and the limit means the same in every language. **A password made only of whitespace is rejected with its own code** (`PASSWORD_BLANK`); spaces inside or around it are kept, since a passphrase is a good password. The upper bound is NIST's floor for a maximum, not a storage limit: only the hash is stored, and argon2 reads the whole password whatever its length. It stops a client from asking the server to hash an arbitrarily long text and gives the form a number to show. **Login applies the same maximum** — no account holds a longer password — so a longer text is rejected before it is hashed; login asks for no minimum. |
 | **RF-02** | Login with valid credentials returns `200` with `{ id, email }` and an `httpOnly` session cookie — the body is the only way the client learns who signed in, since it cannot read the cookie. Invalid credentials return `401` **with the same message whether or not the email exists**, and **in the same time**: when the email does not exist the password is still checked against a placeholder hash, or the quicker answer would give the email away. The email is normalised before lookup. |
 | **RF-02a** | The token expires **8 hours** after issuance — one working day, so it lapses overnight rather than mid-task. The lifetime can be overridden per environment, so expiry can be watched locally in a minute instead of a day; production keeps the default. It carries only the user identifier and the email: an identity card, not a copy of the record. |
-| **RF-03** | Current user lookup returns `200` with `{ id, email }`, read from the verified session token — no query, since neither can change while the token is valid. Without a valid session, `401`. |
-| **RF-04** | Logout deletes the session cookie from the browser and returns `204`. The token itself stays valid until it expires: a copy taken earlier still works — see the known limitation "The token cannot be revoked". |
+| **RF-03** | Current user lookup returns `200` with `{ id, email }`, read from the verified session token — no query, since neither can change while the token is valid. Without a valid session, `401`. **On every protected route, a session cookie that fails verification — expired, forged — is cleared in that same `401`**: the cookie is `httpOnly`, so the browser cannot delete it itself, and kept, it would be sent and rejected on every request. |
+| **RF-04** | Logout deletes the session cookie from the browser and returns `204`, **with or without a valid session**: it only clears a cookie, so it needs nobody signed in, and signing out twice is not an error. The token itself stays valid until it expires: a copy taken earlier still works — see the known limitation "The token cannot be revoked". |
 
 ### 1.2 Cases
 
@@ -171,7 +171,7 @@ cover.**
 | `POST` | `/auth/register` | — | — | email, password | `201` | `400` `409` | RF-01 |
 | `POST` | `/auth/login` | — | — | email, password | `200` `{ id, email }` + cookie | `400` `401` | RF-02 |
 | `GET` | `/auth/me` | ✓ | — | — | `200` `{ id, email }` | `401` | RF-03 |
-| `POST` | `/auth/logout` | ✓ | — | — | `204` + cookie cleared | `401` | RF-04 |
+| `POST` | `/auth/logout` | — | — | — | `204` + cookie cleared | — | RF-04 |
 | `POST` | `/cases` | ✓ | — | title, description | `201` | `400` `401` | RF-05 |
 | `GET` | `/cases` | ✓ | — | status, sort | `200` `{ items, total }` | `400` `401` | RF-06 |
 | `GET` | `/cases/:id` | ✓ | ✓ | — | `200` | `400` `401` `403` `404` | RF-07 |
@@ -252,7 +252,7 @@ sequenceDiagram
     B->>A: GET /cases  (the browser attaches the cookie by itself)
     A->>A: requireAuth · jwtVerify
     alt invalid signature or expired
-        A-->>B: 401
+        A-->>B: 401 + Set-Cookie session=; Expires=1970 (cleared)
     else valid
         A->>D: query scoped to req.user.id
         A-->>B: 200

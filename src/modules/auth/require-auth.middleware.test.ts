@@ -5,6 +5,7 @@ import { signSessionToken } from './session.js'
 import {
   listen,
   sampleUser as user,
+  sessionCookieOf,
   withSession,
 } from '../../../tests/helpers.js'
 import { errorHandler } from '../../shared/errors/error-handler.middleware.js'
@@ -21,12 +22,13 @@ const server = await listen(testApp)
 afterAll(() => server.close())
 
 describe('requireAuth', () => {
-  // RF-03 · no cookie, no session
+  // RF-03 · no cookie, no session — and nothing to clear
   it('answers 401 when there is no session cookie', async () => {
     const res = await request(server).get('/test-route')
 
     expect(res.status).toBe(401)
     expect(res.body).toMatchObject({ code: 'UNAUTHENTICATED' })
+    expect(res.headers['set-cookie']).toBeUndefined()
   })
 
   // RF-03 · a cookie with the right name but no valid token in it
@@ -37,6 +39,7 @@ describe('requireAuth', () => {
 
     expect(res.status).toBe(401)
     expect(res.body).toMatchObject({ code: 'UNAUTHENTICATED' })
+    expect(sessionCookieOf(res)).toMatchObject({ value: '' })
   })
 
   // RF-03 · the handler behind it receives who is asking
