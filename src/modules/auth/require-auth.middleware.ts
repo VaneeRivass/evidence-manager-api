@@ -1,5 +1,6 @@
 import type { Request, RequestHandler } from 'express'
 import {
+  endSession,
   noSession,
   type Session,
   sessionTokenOf,
@@ -8,11 +9,17 @@ import {
 
 // RF-03 · the first link of every protected route: a signature check, no
 // query — so an unauthenticated request never reaches the database.
-export const requireAuth: RequestHandler = async (req, _res, next) => {
+export const requireAuth: RequestHandler = async (req, res, next) => {
   const token = sessionTokenOf(req)
   if (!token) throw noSession()
 
-  req.user = await verifySessionToken(token)
+  try {
+    req.user = await verifySessionToken(token)
+  } catch (error) {
+    // RF-03 · the browser cannot delete an httpOnly cookie: the 401 takes it
+    endSession(res)
+    throw error
+  }
   next()
 }
 

@@ -9,4 +9,5 @@ export const authRouter = Router()
 authRouter.post('/register', validateBody(registerSchema), register)
 authRouter.post('/login', validateBody(loginSchema), login)
 authRouter.get('/me', requireAuth, me)
-authRouter.post('/logout', requireAuth, logout)
+// RF-04 · no requireAuth: clearing a cookie needs nobody signed in
+authRouter.post('/logout', logout)
