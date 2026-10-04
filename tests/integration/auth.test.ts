@@ -111,6 +111,24 @@ describe('POST /auth/login', () => {
     expect(res.status).toBe(200)
   })
 
+  // RF-01b · the password is normalised to NFC at both ends, so the accent may
+  // be written the other way from the one it was registered with: 'é' composed
+  // and 'e' + a mark are the same text, and so the same hash, only if both ends
+  // normalise. This is what the schema test cannot prove: it never hashes.
+  it.each([
+    ['\u00e9', 'e\u0301'], // registered composed, typed decomposed
+    ['e\u0301', '\u00e9'], // registered decomposed, typed composed
+  ])(
+    'signs in with the accent written the other way (%s → %s)',
+    async (stored, typed) => {
+      await register('acento@example.com', stored.repeat(8))
+
+      const res = await login('acento@example.com', typed.repeat(8))
+
+      expect(res.status).toBe(200)
+    },
+  )
+
   // RF-02
   it('answers 401 for the wrong password', async () => {
     const { email } = await createUser()

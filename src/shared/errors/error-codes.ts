@@ -31,6 +31,7 @@ export const FieldCode = {
   INVALID_TYPE: 'INVALID_TYPE',
   UNKNOWN_FIELD: 'UNKNOWN_FIELD',
   NOTHING_TO_CHANGE: 'NOTHING_TO_CHANGE',
+  PASSWORD_BLANK: 'PASSWORD_BLANK',
 } as const
 
 export type FieldCode = (typeof FieldCode)[keyof typeof FieldCode]

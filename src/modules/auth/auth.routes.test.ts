@@ -37,14 +37,25 @@ describe('POST /auth/register', () => {
     })
   })
 
-  // RF-01b · RF-23 · the client needs the limit to say "72 at most"
-  it('answers 400 with the byte limit for a password over 72 bytes', async () => {
-    const res = await register('ana@example.com', 'a'.repeat(73))
+  // RF-01b · RF-23 · the client needs the limit to say "64 at most"
+  it('answers 400 with the limit for a password over 64 characters', async () => {
+    const res = await register('ana@example.com', 'a'.repeat(65))
 
     expect(res.status).toBe(400)
     expect(res.body).toMatchObject({
       code: 'VALIDATION_ERROR',
-      errors: [{ field: 'password', code: 'TOO_LONG', params: { max: 72 } }],
+      errors: [{ field: 'password', code: 'TOO_LONG', params: { max: 64 } }],
+    })
+  })
+
+  // RF-01b · RF-23 · a password of spaces alone has its own code, so the form can
+  // say so instead of "minimum 8", which would be false: it has eight
+  it('answers 400 with the blank code for a password made only of spaces', async () => {
+    const res = await register('ana@example.com', ' '.repeat(8))
+
+    expect(res.status).toBe(400)
+    expect(res.body).toMatchObject({
+      errors: [{ field: 'password', code: 'PASSWORD_BLANK' }],
     })
   })
 })

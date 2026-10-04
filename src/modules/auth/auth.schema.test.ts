@@ -33,7 +33,7 @@ describe('registerSchema', () => {
   })
 
   // RF-01b · the lower bound itself is allowed
-  it('accepts a password of exactly 8 bytes', () => {
+  it('accepts a password of exactly 8 characters', () => {
     const result = registerSchema.safeParse({
       email: 'a@b.com',
       password: '12345678',
@@ -43,41 +43,115 @@ describe('registerSchema', () => {
   })
 
   // RF-01b
-  it('rejects a password under 8 bytes', () => {
+  it('rejects a password of 7 characters', () => {
     const result = registerSchema.safeParse({
       email: 'a@b.com',
-      password: 'short',
+      password: 'aaaaaaa',
     })
 
     expect(result.success).toBe(false)
   })
 
-  // RF-01b
-  it('rejects a password over 72 bytes', () => {
-    const result = registerSchema.safeParse({
-      email: 'a@b.com',
-      password: 'a'.repeat(73),
-    })
+  // RF-01b · characters, not bytes: each of these takes 8 bytes in UTF-8
+  it.each([
+    ['ññññ', 'four letters'],
+    ['😀😀', 'two emoji'],
+  ])('rejects %s, %s', (password) => {
+    const result = registerSchema.safeParse({ email: 'a@b.com', password })
 
     expect(result.success).toBe(false)
   })
 
-  // RF-01b · bcrypt would read only the first 72 bytes of a longer password
-  // and silently discard the rest; the bound must be measured in bytes, not
-  // characters, or a multi-byte password would be capped at the wrong length
-  it('measures the password bound in bytes, not characters', () => {
-    // 'á' is 2 bytes in UTF-8: 36 of them is exactly 72 bytes
-    const atBound = registerSchema.safeParse({
+  // RF-01b · a composed emoji counts each code point: 🚶‍♂️ is 4
+  it('counts every code point of a composed emoji', () => {
+    const result = registerSchema.safeParse({
       email: 'a@b.com',
-      password: 'á'.repeat(36),
-    })
-    const overBound = registerSchema.safeParse({
-      email: 'a@b.com',
-      password: 'á'.repeat(37),
+      password: '🚶‍♂️🚶‍♂️',
     })
 
-    expect(atBound.success).toBe(true)
-    expect(overBound.success).toBe(false)
+    expect(result.success).toBe(true)
+  })
+
+  // RF-01b · characters, not bytes: 64 ñ take 128 bytes, 64 😀 take 256
+  it.each(['a', 'ñ', '😀'])(
+    'accepts 64 characters of %s and rejects 65',
+    (character) => {
+      const email = 'a@b.com'
+
+      expect(
+        registerSchema.safeParse({ email, password: character.repeat(64) })
+          .success,
+      ).toBe(true)
+      expect(
+        registerSchema.safeParse({ email, password: character.repeat(65) })
+          .success,
+      ).toBe(false)
+    },
+  )
+
+  // RF-01b · long enough, yet nothing typed
+  it.each([' '.repeat(8), '\t\n'.repeat(4)])(
+    'rejects a password made only of whitespace (%j)',
+    (password) => {
+      const result = registerSchema.safeParse({ email: 'a@b.com', password })
+
+      expect(result.error?.issues[0]?.code).toBe('custom')
+      expect(result.error?.issues[0]).toHaveProperty(
+        'params.code',
+        'PASSWORD_BLANK',
+      )
+    },
+  )
+
+  // RF-01b · counted on the NFC form: eight 'é' built from a base and a mark
+  // are four characters, too short, though they are eight code points as typed
+  it('counts a decomposed accent as one character', () => {
+    const email = 'a@b.com'
+
+    expect(
+      registerSchema.safeParse({ email, password: 'e\u0301'.repeat(4) })
+        .success,
+    ).toBe(false)
+    expect(
+      registerSchema.safeParse({ email, password: 'e\u0301'.repeat(8) })
+        .success,
+    ).toBe(true)
+  })
+
+  // RF-01b · the parsed value is NFC, so the hash is the same either way
+  it('normalises the password to NFC', () => {
+    const parsed = registerSchema.parse({
+      email: 'a@b.com',
+      password: 'e\u0301'.repeat(8),
+    })
+
+    expect(parsed.password).toBe('é'.repeat(8))
+  })
+
+  // RF-01b · a passphrase keeps its spaces, around and inside
+  it('keeps the spaces of a password as typed', () => {
+    const result = registerSchema.parse({
+      email: 'a@b.com',
+      password: '  clave segura  ',
+    })
+
+    expect(result.password).toBe('  clave segura  ')
+  })
+
+  // RF-01b · whitespace too long to be a password is still only whitespace: its
+  // own code, one error, never "too long" and "too short" at once
+  it('reports whitespace over the maximum as blank', () => {
+    const result = registerSchema.safeParse({
+      email: 'a@b.com',
+      password: ' '.repeat(65),
+    })
+
+    expect(result.error?.issues).toHaveLength(1)
+    expect(result.error?.issues[0]?.code).toBe('custom')
+    expect(result.error?.issues[0]).toHaveProperty(
+      'params.code',
+      'PASSWORD_BLANK',
+    )
   })
 })
 
@@ -92,8 +166,7 @@ describe('loginSchema', () => {
     expect(result.email).toBe('ana@example.com')
   })
 
-  // RF-02 · the password policy is registration's: a password stored under
-  // an older, looser policy must still be able to sign in
+  // RF-02 · the minimum is registration's, enforced when the password is set
   it('accepts a password shorter than the registration minimum', () => {
     const result = loginSchema.safeParse({
       email: 'a@b.com',
@@ -108,5 +181,18 @@ describe('loginSchema', () => {
     const result = loginSchema.safeParse({ email: 'a@b.com', password: '' })
 
     expect(result.success).toBe(false)
+  })
+
+  // RF-01b · no account holds a longer password, so a longer text is
+  // rejected before it is hashed
+  it('accepts a password of 64 characters and rejects one of 65', () => {
+    const email = 'a@b.com'
+
+    expect(
+      loginSchema.safeParse({ email, password: 'a'.repeat(64) }).success,
+    ).toBe(true)
+    expect(
+      loginSchema.safeParse({ email, password: 'a'.repeat(65) }).success,
+    ).toBe(false)
   })
 })

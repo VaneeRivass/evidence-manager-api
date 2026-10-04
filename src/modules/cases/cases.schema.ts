@@ -1,17 +1,32 @@
 import * as z from 'zod'
 import { CaseStatus } from '../../generated/prisma/enums.js'
 import { FieldCode } from '../../shared/errors/error-codes.js'
+import { tooShort } from '../../shared/validation/field-issue.js'
 
-// RF-05 · required, so spaces alone do not count: trimmed first, then between
-// 1 and the column's size, and without a null character, which PostgreSQL
-// cannot store.
+// Anything but whitespace, control characters and what Unicode marks as
+// invisible, such as the zero-width space.
+const VISIBLE = /[^\s\p{Cc}\p{Default_Ignorable_Code_Point}]/u
+
+// RF-05 · trimmed, then at least one VISIBLE character — asked, never stripped,
+// since 🚶‍♂️ is joined by an invisible one. A null character is its own error:
+// PostgreSQL cannot store it, and it is a control character, so this check runs
+// first or "nothing visible" would catch it as too short.
 const requiredText = (max: number) =>
   z
     .string()
     .trim()
-    .min(1)
+    .superRefine((value, ctx) => {
+      if (value.includes('\0')) {
+        ctx.addIssue({
+          code: 'custom',
+          params: { code: FieldCode.INVALID_FORMAT },
+          continue: false,
+        })
+      } else if (!VISIBLE.test(value)) {
+        tooShort(ctx, value, 1)
+      }
+    })
     .max(max)
-    .regex(/^[^\0]*$/)
 
 // RF-05 · the column sizes, each written once for creating and editing.
 const title = requiredText(120)

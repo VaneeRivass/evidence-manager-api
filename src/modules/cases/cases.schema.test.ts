@@ -58,6 +58,76 @@ describe('createCaseSchema', () => {
     ).toBe(false)
   })
 
+  // RF-05 · a title nobody can see is no title
+  it.each([
+    ['a zero-width space', '\u200B'],
+    ['several invisible characters', '\u200B\u2060\uFEFF'],
+    ['spaces and invisible characters', ' \u200B\t'],
+    ['control characters', '\u0001\u007F'],
+  ])('rejects a title made only of %s', (_, title) => {
+    const result = createCaseSchema.safeParse({
+      title,
+      description: 'Emails from the bank',
+    })
+
+    expect(result.success).toBe(false)
+  })
+
+  // RF-05 · the invisible characters are only left out to ask the question:
+  // 🚶‍♂️ is joined by one of them and must come back whole
+  it('keeps the invisible characters of a title that has visible text', () => {
+    const parsed = createCaseSchema.parse({
+      title: 'Caminata 🚶‍♂️',
+      description: 'Emails from the bank',
+    })
+
+    expect(parsed.title).toBe('Caminata 🚶‍♂️')
+  })
+
+  // RF-05 · code points, as VarChar counts them: 🚶‍♂️ is 4, 🇪🇸 is 2, and an
+  // accent typed apart from its letter is one more
+  it.each([
+    ['🚶‍♂️', 30, 31],
+    ['🇪🇸', 60, 61],
+    ['😀', 120, 121],
+    ['a\u0301', 60, 61],
+  ])('fits %s %i times in a title, not %i', (piece, fits, overflows) => {
+    const description = 'Emails from the bank'
+
+    expect(
+      createCaseSchema.safeParse({ title: piece.repeat(fits), description })
+        .success,
+    ).toBe(true)
+    expect(
+      createCaseSchema.safeParse({
+        title: piece.repeat(overflows),
+        description,
+      }).success,
+    ).toBe(false)
+  })
+
+  // RF-05 · nothing visible is too short, whatever its length: one error,
+  // not "too short" and "too long" at once
+  it('reports one error for invisible text over the maximum', () => {
+    const result = createCaseSchema.safeParse({
+      title: '\u200B'.repeat(121),
+      description: 'Emails from the bank',
+    })
+
+    expect(result.error?.issues).toHaveLength(1)
+    expect(result.error?.issues[0]?.code).toBe('too_small')
+  })
+
+  // RF-05 · the description follows the same rule
+  it('rejects a description made only of invisible characters', () => {
+    const result = createCaseSchema.safeParse({
+      title: 'Phishing',
+      description: '\u200B\u0001',
+    })
+
+    expect(result.success).toBe(false)
+  })
+
   // RF-05 · PostgreSQL cannot store a null character: a 400, not a 500
   it.each(['title', 'description'])(
     'rejects a null character in the %s',
@@ -68,9 +138,29 @@ describe('createCaseSchema', () => {
         [field]: 'a\u0000b',
       })
 
-      expect(result.success).toBe(false)
+      expect(result.error?.issues[0]?.code).toBe('custom')
+      expect(result.error?.issues[0]).toHaveProperty(
+        'params.code',
+        'INVALID_FORMAT',
+      )
     },
   )
+
+  // RF-05 · a null character is its own error even alone: it is a control one,
+  // so without checking it first it would read as "nothing visible" (too short)
+  it('reports a title of only a null character as invalid format', () => {
+    const result = createCaseSchema.safeParse({
+      title: '\u0000',
+      description: 'Emails from the bank',
+    })
+
+    expect(result.error?.issues).toHaveLength(1)
+    expect(result.error?.issues[0]?.code).toBe('custom')
+    expect(result.error?.issues[0]).toHaveProperty(
+      'params.code',
+      'INVALID_FORMAT',
+    )
+  })
 
   // RF-05 · the owner, the status and the file never come from the body
   it('drops every field other than title and description', () => {
@@ -164,6 +254,7 @@ describe('updateCaseSchema', () => {
   // RF-08 · the same limits and characters as creation
   it.each([
     { title: '   ' },
+    { title: '\u200B' }, // a zero-width space alone
     { title: 'a'.repeat(121) },
     { description: 'a\u0000b' },
     { status: 'PENDING' },

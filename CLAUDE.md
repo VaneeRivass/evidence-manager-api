@@ -155,7 +155,9 @@ There is no cleanup process: serverless has no background jobs.
 **Never `multipart/form-data`.** No binary ever enters this process.
 
 **Emails are normalised to lowercase** before storing and before querying. Passwords are
-validated between 8 and 72 bytes.
+validated between 8 and 64 characters (code points, not bytes) on the NFC form, and one made
+only of whitespace is rejected with its own code. Passwords are normalised to NFC before
+hashing, so composed and decomposed accents sign in the same.
 
 **Nothing leaves in the database's shape.** Every module maps what it returns through an
 explicit mapper that **names the fields that go out**, never the ones it hides: `auth.mapper.ts`
