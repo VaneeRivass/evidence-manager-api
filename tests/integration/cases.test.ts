@@ -146,6 +146,41 @@ describe('POST /cases', () => {
     expect(await prisma.case.count()).toBe(0)
   })
 
+  // RF-05 · RF-23 · a title nobody can see is too short, with the same code
+  // and minimum the client already shows for an empty one
+  it('answers 400 for a title made only of a zero-width space', async () => {
+    const owner = await signIn(server)
+
+    const res = await createCase(owner, {
+      title: '\u200B',
+      description: 'Emails from the bank',
+    })
+
+    expect(res.status).toBe(400)
+    expect(res.body).toMatchObject({
+      errors: [{ field: 'title', code: 'TOO_SHORT', params: { min: 1 } }],
+    })
+    expect(await prisma.case.count()).toBe(0)
+  })
+
+  // RF-05 · stored as sent: the column takes the 120 code points the API
+  // counted, and the joiners inside 🚶‍♂️ survive the round trip
+  it('stores a title of 30 composed emoji whole', async () => {
+    const owner = await signIn(server)
+    const title = '🚶‍♂️'.repeat(30)
+
+    const res = await createCase(owner, {
+      title,
+      description: 'Emails from the bank',
+    })
+
+    expect(res.status).toBe(201)
+    const stored = await prisma.case.findUniqueOrThrow({
+      where: { id: (res.body as PublicCase).id },
+    })
+    expect(stored.title).toBe(title)
+  })
+
   // RF-05 · the same limit as the column, so it never reaches the database
   it('answers 400 for a title over 120 characters', async () => {
     const owner = await signIn(server)

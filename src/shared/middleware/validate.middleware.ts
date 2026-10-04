@@ -14,7 +14,7 @@ import {
 import { ErrorCode, FieldCode } from '../errors/error-codes.js'
 
 // Maps a Zod issue to the stable per-field code the client switches on.
-// A hand-written check (e.g. auth.schema.ts's password byte length) reports
+// A hand-written check (e.g. cases.schema.ts's "nothing visible") reports
 // through ctx.addIssue({ code: 'too_small' | 'too_big', ... }) so it lands
 // in the same cases below as Zod's own .min()/.max() — one mapping, not two.
 const toFieldError = (issue: z.core.$ZodIssue): FieldError => {
