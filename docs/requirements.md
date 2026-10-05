@@ -444,27 +444,17 @@ machine, which is where it already was.
 downloads eight bytes and verifies a PDF starts with `%PDF` and a PNG with `‰PNG` — and an
 asynchronous antivirus scan afterwards.
 
-### Rate limiting is approximate
-
-The counter lives in each instance's memory. On a serverless platform several instances
-serve in parallel and share no state, so the effective limit multiplies by the number of
-active instances.
-
-**How it would be resolved.** A shared counter store. It is the same constraint that makes
-a circuit breaker unworkable here: both patterns need state between requests, and the
-serverless model does not guarantee it.
-
 ### The file routes have no rate limit
 
-Only the authentication routes are limited. A signed-in user can ask for upload links in a
+A signed-in user can ask for upload links in a
 loop and upload to each one, and every upload is a paid storage operation. The damage is
 bounded: an object never confirmed is deleted after 24 hours, and each weighs at most
 the size limit. A lock per case — no new link while one awaits confirmation — was
 considered and dropped: it does not stop someone who opens a thousand cases, and it blocks
 the honest user who closed the tab mid-upload until the link expires.
 
-**How it would be resolved.** A per-user limit on the file routes, which inherits the
-limitation above.
+**How it would be resolved.** A per-user limit on the file routes, kept in a
+counter store shared between instances.
 
 ### A lost connection while saving can leave a spare file
 

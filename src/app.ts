@@ -1,4 +1,5 @@
 import express, { type Express } from 'express'
+import helmet from 'helmet'
 // Also validates the environment on import, on every entry point, Vercel
 // included, which reaches this file through api/index.ts and never runs server.ts.
 import { env } from './shared/config/env.js'
@@ -23,6 +24,10 @@ export function createApp(storage: StoragePort): Express {
 
   // First, so every later line of the request, error included, carries its id.
   app.use(httpLogger)
+
+  // Hardening, not a requirement: safe response headers (no MIME sniffing, no
+  // framing, HSTS). After the logger, so a blocked response keeps its request id.
+  app.use(helmet())
 
   app.get('/health', (_req, res) => {
     res.json({ status: 'ok' })

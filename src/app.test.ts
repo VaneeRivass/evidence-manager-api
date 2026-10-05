@@ -16,6 +16,15 @@ describe('the application', () => {
     expect(res.body).toEqual({ status: 'ok' })
   })
 
+  // Hardening · proves helmet is on the real app, not just installed
+  it('answers with the hardened headers', async () => {
+    const res = await request(server).get('/health')
+
+    expect(res.headers['x-content-type-options']).toBe('nosniff')
+    // Helmet hides the framework by default; a banner only helps an attacker.
+    expect(res.headers['x-powered-by']).toBeUndefined()
+  })
+
   // RNF-09 · Vercel runs the very app the tests and server.ts use, not a copy
   it('hands Vercel the same app, built once in app.ts', () => {
     expect(vercelHandler).toBe(app)

@@ -8,14 +8,53 @@ on:
 jobs:
   check:
     runs-on: ubuntu-latest
+
+    # The same image as docker-compose.yml, started empty. The integration suite
+    # needs a database whose name ends in _test, so the service creates that one
+    # directly: no second database to set up before the tests.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: evidence
+          POSTGRES_PASSWORD: evidence
+          POSTGRES_DB: evidence_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U evidence"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://evidence:evidence@localhost:5432/evidence_test
+      DIRECT_URL: postgresql://evidence:evidence@localhost:5432/evidence_test
+      TEST_DATABASE_URL: postgresql://evidence:evidence@localhost:5432/evidence_test
+      JWT_SECRET: test-secret-at-least-thirty-two-chars
+      S3_ENDPOINT: https://test.r2.cloudflarestorage.com
+      S3_BUCKET: test-bucket
+      S3_ACCESS_KEY_ID: test-access-key-id
+      S3_SECRET_ACCESS_KEY: test-secret-access-key
+
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
+
       - run: npm ci
       - run: npm run typecheck
       - run: npm run lint
       - run: npm run format:check
-      - run: npm run test:unit
+      # ESLint reads one file at a time; knip sees an export, a file or a
+      # dependency nobody imports.
+      - run: npm run knip
+
+      # Against the empty service database: a migration that only works on top
+      # of one that ran before fails here, which is the failure this step exists
+      # for. See RNF-10.
+      - run: npx prisma migrate deploy
+
+      - run: npm test

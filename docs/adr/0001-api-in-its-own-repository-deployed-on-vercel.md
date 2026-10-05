@@ -41,6 +41,4 @@ no port opened and no process left hanging: the decision that solves deployment 
 testing.
 
 **Against.** In serverless each instance is an isolated process, so the database connection
-pool has to be addressed (ADR-0002) and rate limiting becomes approximate, because its
-counter is not shared between instances. The latter is accepted and recorded as a known
-limitation.
+pool has to be addressed (ADR-0002).
