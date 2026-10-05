@@ -6,7 +6,9 @@ export interface ObjectMetadata {
   contentType: string
 }
 
-export interface SignedUrl {
+// Not exported: only the port's own signatures name it, and nothing outside
+// imports it. Exporting it would advertise a type the module does not need to give.
+interface SignedUrl {
   url: string
   expiresIn: number
 }

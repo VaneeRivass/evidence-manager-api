@@ -24,6 +24,7 @@ issues short-lived presigned URLs and the browser talks to object storage direct
 | Validation | Zod — one schema is the validator, the type and the OpenAPI source |
 | Identity | argon2 · jose · session in an `httpOnly` cookie |
 | Logging | pino, structured, with a request identifier |
+| Hardening | Helmet response headers |
 | Tests | Vitest · Supertest, against a real PostgreSQL |
 | Deployment | Vercel |
 
@@ -229,8 +230,6 @@ code:
 - **The file contents are not inspected.** Type and size are verified against storage, but
   not the bytes. The file is never served from the application's domain, which is what
   makes the risk acceptable.
-- **Rate limiting is approximate.** Its counter lives in each instance's memory, and
-  serverless instances share none.
 - **One piece of evidence per case**, and two states. Both fixed by the brief.
 
 ---
